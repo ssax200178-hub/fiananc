@@ -91,23 +91,28 @@ const SettingsPage: React.FC = () => {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-black text-slate-900 dark:text-white font-display">الإعدادات</h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1">إدارة المستخدمين وتخصيص النظام</p>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1">
+                        {currentUser?.role === 'user' ? 'تخصيص النظام' : 'إدارة المستخدمين وتخصيص النظام'}
+                    </p>
                 </div>
                 <span className="material-symbols-outlined text-6xl text-slate-200 dark:text-slate-700">settings</span>
             </div>
 
             {/* Tabs Navigation */}
             <div className="flex bg-white dark:bg-[#1e293b] p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm w-fit">
-                <button
-                    onClick={() => setActiveTab('users')}
-                    className={`px-6 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${activeTab === 'users'
-                        ? 'bg-[var(--color-active)] text-white shadow-md'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                        }`}
-                >
-                    <span className="material-symbols-outlined">group</span>
-                    إدارة المستخدمين
-                </button>
+                {/* Only show Users tab for admin and super_admin */}
+                {(currentUser?.role === 'admin' || currentUser?.role === 'super_admin') && (
+                    <button
+                        onClick={() => setActiveTab('users')}
+                        className={`px-6 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${activeTab === 'users'
+                            ? 'bg-[var(--color-active)] text-white shadow-md'
+                            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                            }`}
+                    >
+                        <span className="material-symbols-outlined">group</span>
+                        إدارة المستخدمين
+                    </button>
+                )}
                 <button
                     onClick={() => setActiveTab('appearance')}
                     className={`px-6 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${activeTab === 'appearance'
@@ -133,13 +138,16 @@ const SettingsPage: React.FC = () => {
                                 </h2>
                                 <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">إدارة حسابات الموظفين والصلاحيات</p>
                             </div>
-                            <button
-                                onClick={() => setIsAddUserModalOpen(true)}
-                                className="px-4 py-2 bg-[var(--color-header)] hover:brightness-110 text-white rounded-lg font-bold flex items-center gap-2 transition-all shadow-sm"
-                            >
-                                <span className="material-symbols-outlined">person_add</span>
-                                إضافة مستخدم
-                            </button>
+                            {/* Only super_admin can add users */}
+                            {currentUser?.role === 'super_admin' && (
+                                <button
+                                    onClick={() => setIsAddUserModalOpen(true)}
+                                    className="px-4 py-2 bg-[var(--color-header)] hover:brightness-110 text-white rounded-lg font-bold flex items-center gap-2 transition-all shadow-sm"
+                                >
+                                    <span className="material-symbols-outlined">person_add</span>
+                                    إضافة مستخدم
+                                </button>
+                            )}
                         </div>
 
                         <div className="overflow-x-auto">
@@ -287,6 +295,13 @@ const SettingsPage: React.FC = () => {
                             </div>
                         </div>
                     )}
+                </div>
+            ) : currentUser?.role === 'user' ? (
+                // Regular users see access denied message
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-2xl p-8 text-center">
+                    <span className="material-symbols-outlined text-6xl text-yellow-600 dark:text-yellow-400">block</span>
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mt-4">صلاحيات محدودة</h3>
+                    <p className="text-slate-600 dark:text-slate-400 mt-2">ليس لديك صلاحية الوصول لإدارة المستخدمين</p>
                 </div>
             ) : (
                 <div className="space-y-6">

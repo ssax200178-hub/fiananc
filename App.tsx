@@ -185,7 +185,22 @@ const App: React.FC = () => {
       colorScheme,
       particlesConfig
     };
-    saveToStorage('reconciliation-data', dataToSave);
+
+    console.log('💾 [AUTO-SAVE] جار حفظ البيانات...', {
+      history: history.length,
+      bankDefinitions: bankDefinitions.length,
+      fundSnapshots: fundSnapshots.length,
+      customUsers: customUsers.length,
+      theme,
+      currency
+    });
+
+    const success = saveToStorage('reconciliation-data', dataToSave);
+    if (success) {
+      console.log('✅ [AUTO-SAVE] تم الحفظ التلقائي بنجاح');
+    } else {
+      console.error('❌ [AUTO-SAVE] فشل الحفظ التلقائي');
+    }
   }, [history, bankDefinitions, fundSnapshots, users, theme, currency, currentData, colorScheme, particlesConfig, isInitialized]);
 
   // Apply color scheme when it changes

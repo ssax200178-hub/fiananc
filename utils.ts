@@ -45,13 +45,24 @@ export async function hashPassword(password: string): Promise<string> {
  * حفظ البيانات في LocalStorage
  * @param key - مفتاح التخزين
  * @param data - البيانات للحفظ (سيتم تحويلها لـ JSON)
+ * @returns true إذا نجح الحفظ، false إذا فشل
  */
-export function saveToStorage<T>(key: string, data: T): void {
+export function saveToStorage<T>(key: string, data: T): boolean {
     try {
         const jsonData = JSON.stringify(data);
         localStorage.setItem(key, jsonData);
-    } catch (error) {
-        console.error('خطأ في حفظ البيانات:', error);
+        console.log(`✅ [STORAGE] تم حفظ البيانات بنجاح: ${key}`);
+        return true;
+    } catch (error: any) {
+        // Check for quota exceeded error
+        if (error.name === 'QuotaExceededError' || error.code === 22) {
+            console.error('❌ [STORAGE] مساحة التخزين ممتلئة! يرجى حذف بيانات قديمة أو تصدير البيانات.');
+            alert('⚠️ مساحة التخزين ممتلئة! يرجى تصدير البيانات وحذف السجلات القديمة.');
+        } else {
+            console.error('❌ [STORAGE] خطأ في حفظ البيانات:', error);
+            alert('⚠️ فشل حفظ البيانات! تحقق من إعدادات المتصفح.');
+        }
+        return false;
     }
 }
 
@@ -65,11 +76,15 @@ export function loadFromStorage<T>(key: string, defaultValue: T): T {
     try {
         const jsonData = localStorage.getItem(key);
         if (jsonData === null) {
+            console.log(`ℹ️ [STORAGE] لا توجد بيانات محفوظة لـ: ${key}`);
             return defaultValue;
         }
-        return JSON.parse(jsonData) as T;
+        const parsed = JSON.parse(jsonData) as T;
+        console.log(`✅ [STORAGE] تم تحميل البيانات بنجاح: ${key}`);
+        return parsed;
     } catch (error) {
-        console.error('خطأ في تحميل البيانات:', error);
+        console.error('❌ [STORAGE] خطأ في تحميل البيانات:', error);
+        console.warn('⚠️ [STORAGE] سيتم استخدام القيم الافتراضية');
         return defaultValue;
     }
 }
