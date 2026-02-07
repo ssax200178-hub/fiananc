@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
     },
     preview: {
-      allowedHosts: ['fiananc.onrender.com']
+      allowedHosts: true
     },
     plugins: [react()],
     define: {

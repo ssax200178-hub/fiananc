@@ -132,6 +132,7 @@ const App: React.FC = () => {
           background: '#F5F5F5',
           success: '#4CAF50'
         },
+        currentData: defaultData,
         particlesConfig: {
           enabled: false,
           type: 'dollar' as ParticleType,
@@ -150,6 +151,7 @@ const App: React.FC = () => {
       setFundSnapshots(savedData.fundSnapshots || []);
       setTheme(savedData.theme);
       setCurrency(savedData.currency);
+      if (savedData.currentData) setCurrentData(savedData.currentData);
       if (savedData.colorScheme) setColorScheme(savedData.colorScheme);
       if (savedData.particlesConfig) setParticlesConfig(savedData.particlesConfig);
       setIsInitialized(true);
@@ -179,11 +181,12 @@ const App: React.FC = () => {
       customUsers,
       theme,
       currency,
+      currentData,
       colorScheme,
       particlesConfig
     };
     saveToStorage('reconciliation-data', dataToSave);
-  }, [history, bankDefinitions, fundSnapshots, users, theme, currency, colorScheme, particlesConfig, isInitialized]);
+  }, [history, bankDefinitions, fundSnapshots, users, theme, currency, currentData, colorScheme, particlesConfig, isInitialized]);
 
   // Apply color scheme when it changes
   useEffect(() => {
