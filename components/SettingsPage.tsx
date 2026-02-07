@@ -17,7 +17,10 @@ const SettingsPage: React.FC = () => {
         updateUserName
     } = useAppContext();
 
-    const [activeTab, setActiveTab] = useState<'users' | 'appearance'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'appearance'>(
+        currentUser?.role === 'user' ? 'appearance' : 'users'
+    );
+
 
     // --- User Management State ---
     const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
