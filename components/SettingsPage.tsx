@@ -14,7 +14,7 @@ const SettingsPage: React.FC = () => {
         addUser,
         toggleUserStatus,
         deleteUser,
-        updateUserName
+        updateUser
     } = useAppContext();
 
     const [activeTab, setActiveTab] = useState<'users' | 'appearance'>(
@@ -47,28 +47,45 @@ const SettingsPage: React.FC = () => {
     const [isEditUserModalOpen, setIsEditUserModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [editUserForm, setEditUserForm] = useState({
+        username: '',
         name: '',
-        role: 'user' as UserRole
+        password: ''
     });
 
     const handleOpenEditModal = (user: User) => {
         setEditingUser(user);
         setEditUserForm({
+            username: user.username,
             name: user.name || '',
-            role: user.role
+            password: '' // Always start empty for security
         });
         setIsEditUserModalOpen(true);
     };
 
-    const handleEditUser = (e: React.FormEvent) => {
+    const handleEditUser = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingUser) return;
 
         try {
-            updateUserName(editingUser.id, editUserForm.name);
-            setIsEditUserModalOpen(false);
-            setEditingUser(null);
-            alert('✅ تم تحديث بيانات المستخدم بنجاح');
+            const updates: { username?: string; name?: string; password?: string } = {};
+
+            // Only include changed fields
+            if (editUserForm.username !== editingUser.username) {
+                updates.username = editUserForm.username;
+            }
+            if (editUserForm.name !== editingUser.name) {
+                updates.name = editUserForm.name;
+            }
+            if (editUserForm.password) {
+                updates.password = editUserForm.password;
+            }
+
+            const success = await updateUser(editingUser.id, updates);
+            if (success) {
+                setIsEditUserModalOpen(false);
+                setEditingUser(null);
+                alert('✅ تم تحديث بيانات المستخدم بنجاح');
+            }
         } catch (error) {
             console.error(error);
             alert('❌ فشل تحديث البيانات');
@@ -355,10 +372,15 @@ const SettingsPage: React.FC = () => {
                                     </button>
                                 </div>
                                 <form onSubmit={handleEditUser} className="p-6 space-y-4">
-                                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-4">
-                                        <p className="text-sm text-blue-700 dark:text-blue-300">
-                                            <strong>اسم المستخدم:</strong> {editingUser.username}
-                                        </p>
+                                    <div>
+                                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">اسم المستخدم (للدخول)</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={editUserForm.username}
+                                            onChange={e => setEditUserForm({ ...editUserForm, username: e.target.value })}
+                                            className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white"
+                                        />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">الاسم الكامل</label>
@@ -367,6 +389,16 @@ const SettingsPage: React.FC = () => {
                                             required
                                             value={editUserForm.name}
                                             onChange={e => setEditUserForm({ ...editUserForm, name: e.target.value })}
+                                            className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">كلمة المرور الجديدة (اختياري)</label>
+                                        <input
+                                            type="password"
+                                            placeholder="اتركه فارغاً لعدم التغيير"
+                                            value={editUserForm.password}
+                                            onChange={e => setEditUserForm({ ...editUserForm, password: e.target.value })}
                                             className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white"
                                         />
                                     </div>

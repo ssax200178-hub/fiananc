@@ -88,7 +88,7 @@ const App: React.FC = () => {
   // Initialize default users and load data on first mount
   useEffect(() => {
     const initializeApp = async () => {
-      // Create default users with hashed passwords
+      // Create default users with hashed passwords - only super_admin remains
       const defaultUsers: User[] = [
         {
           id: '0',
@@ -96,22 +96,6 @@ const App: React.FC = () => {
           name: 'مدير النظام',
           passwordHash: await hashPassword('200178'),
           role: 'super_admin',
-          isActive: true
-        },
-        {
-          id: '1',
-          username: 'admin',
-          name: 'مسؤول',
-          passwordHash: await hashPassword('admin123'),
-          role: 'admin',
-          isActive: true
-        },
-        {
-          id: '2',
-          username: 'user',
-          name: 'موظف',
-          passwordHash: await hashPassword('user123'),
-          role: 'user',
           isActive: true
         }
       ];
@@ -341,8 +325,27 @@ const App: React.FC = () => {
     console.log(success ? '✅ [TOGGLE-STATUS] تم تحديث حالة المستخدم' : '❌ [TOGGLE-STATUS] فشل التحديث');
   };
 
-  const updateUserName = (id: string, name: string) => {
-    const updatedUsers = users.map(u => u.id === id ? { ...u, name } : u);
+  const updateUser = async (id: string, updates: { username?: string; name?: string; password?: string }) => {
+    // Validate username uniqueness if changing username
+    if (updates.username) {
+      const existingUser = users.find(u => u.id !== id && u.username.toLowerCase() === updates.username.toLowerCase());
+      if (existingUser) {
+        alert('❌ اسم المستخدم مستخدم بالفعل!');
+        return false;
+      }
+    }
+
+    const updatedUsers = await Promise.all(users.map(async u => {
+      if (u.id === id) {
+        return {
+          ...u,
+          ...(updates.username && { username: updates.username }),
+          ...(updates.name && { name: updates.name }),
+          ...(updates.password && { passwordHash: await hashPassword(updates.password) })
+        };
+      }
+      return u;
+    }));
     setUsers(updatedUsers);
 
     // IMMEDIATE SAVE - Critical for persistence
@@ -360,7 +363,8 @@ const App: React.FC = () => {
     };
 
     const success = saveToStorage('reconciliation-data', dataToSave);
-    console.log(success ? '✅ [UPDATE-NAME] تم تحديث الاسم' : '❌ [UPDATE-NAME] فشل التحديث');
+    console.log(success ? '✅ [UPDATE-USER] تم تحديث بيانات المستخدم' : '❌ [UPDATE-USER] فشل التحديث');
+    return success;
   };
 
   // Restaurant Recon Actions
@@ -462,7 +466,7 @@ const App: React.FC = () => {
     addUser,
     deleteUser,
     toggleUserStatus,
-    updateUserName,
+    updateUser,
     currentData,
     updateCurrentData,
     resetCurrentData,

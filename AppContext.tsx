@@ -102,7 +102,7 @@ export interface AppContextType {
     addUser: (username: string, password: string, name: string, role: UserRole) => Promise<void>;
     deleteUser: (id: string) => void;
     toggleUserStatus: (id: string) => void;
-    updateUserName: (id: string, name: string) => void;
+    updateUser: (id: string, updates: { username?: string; name?: string; password?: string }) => Promise<boolean>;
 
     // Restaurant Recon Data
     currentData: ReconData;
