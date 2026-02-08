@@ -254,6 +254,7 @@ const App: React.FC = () => {
       alert('اسم المستخدم موجود بالفعل');
       return;
     }
+
     const newUser: User = {
       id: generateId(),
       username,
@@ -262,19 +263,104 @@ const App: React.FC = () => {
       role,
       isActive: true
     };
-    setUsers(prev => [...prev, newUser]);
+
+    const updatedUsers = [...users, newUser];
+    setUsers(updatedUsers);
+
+    // IMMEDIATE SAVE - Critical for persistence
+    const customUsers = updatedUsers.filter(u => !['0', '1', '2'].includes(u.id));
+    const dataToSave = {
+      history,
+      bankDefinitions,
+      fundSnapshots,
+      customUsers,
+      theme,
+      currency,
+      currentData,
+      colorScheme,
+      particlesConfig
+    };
+
+    const success = saveToStorage('reconciliation-data', dataToSave);
+    console.log(success ? '✅ [ADD-USER] تم حفظ المستخدم بنجاح' : '❌ [ADD-USER] فشل حفظ المستخدم');
   };
 
   const deleteUser = (id: string) => {
-    setUsers(prev => prev.filter(u => u.id !== id));
+    // Prevent deleting self
+    if (currentUser?.id === id) {
+      alert('❌ لا يمكنك حذف حسابك الخاص!');
+      return;
+    }
+
+    // Prevent deleting default super admin
+    if (id === '0') {
+      alert('❌ لا يمكن حذف مدير النظام الافتراضي!');
+      return;
+    }
+
+    const updatedUsers = users.filter(u => u.id !== id);
+    setUsers(updatedUsers);
+
+    // IMMEDIATE SAVE - Critical for persistence
+    const customUsers = updatedUsers.filter(u => !['0', '1', '2'].includes(u.id));
+    const dataToSave = {
+      history,
+      bankDefinitions,
+      fundSnapshots,
+      customUsers,
+      theme,
+      currency,
+      currentData,
+      colorScheme,
+      particlesConfig
+    };
+
+    const success = saveToStorage('reconciliation-data', dataToSave);
+    console.log(success ? '✅ [DELETE-USER] تم حذف المستخدم بنجاح' : '❌ [DELETE-USER] فشل حذف المستخدم');
   };
 
   const toggleUserStatus = (id: string) => {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, isActive: !u.isActive } : u));
+    const updatedUsers = users.map(u => u.id === id ? { ...u, isActive: !u.isActive } : u);
+    setUsers(updatedUsers);
+
+    // IMMEDIATE SAVE - Critical for persistence
+    const customUsers = updatedUsers.filter(u => !['0', '1', '2'].includes(u.id));
+    const dataToSave = {
+      history,
+      bankDefinitions,
+      fundSnapshots,
+      customUsers,
+      theme,
+      currency,
+      currentData,
+      colorScheme,
+      particlesConfig
+    };
+
+    const success = saveToStorage('reconciliation-data', dataToSave);
+    console.log(success ? '✅ [TOGGLE-STATUS] تم تحديث حالة المستخدم' : '❌ [TOGGLE-STATUS] فشل التحديث');
   };
 
   const updateUserName = (id: string, name: string) => {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, name } : u));
+    const updatedUsers = users.map(u => u.id === id ? { ...u, name } : u);
+    setUsers(updatedUsers);
+
+    // IMMEDIATE SAVE - Critical for persistence
+    const customUsers = updatedUsers.filter(u => !['0', '1', '2'].includes(u.id));
+    const dataToSave = {
+      history,
+      bankDefinitions,
+      fundSnapshots,
+      customUsers,
+      theme,
+      currency,
+      currentData,
+      colorScheme,
+      particlesConfig
+    };
+
+    const success = saveToStorage('reconciliation-data', dataToSave);
+    console.log(success ? '✅ [UPDATE-NAME] تم تحديث الاسم' : '❌ [UPDATE-NAME] فشل التحديث');
   };
 
   // Restaurant Recon Actions
