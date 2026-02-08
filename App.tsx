@@ -18,6 +18,8 @@ import {
   Currency,
   ReconData,
   BankDefinition,
+  FundsCurrency,
+  FundLineItem,
   FundSnapshot,
   ColorScheme,
   ParticlesConfig,
@@ -393,11 +395,13 @@ const App: React.FC = () => {
   };
 
   // Funds Actions
-  const addBankDefinition = (name: string, currency: 'old_riyal' | 'new_riyal') => {
+  const addBankDefinition = (name: string, currency: FundsCurrency, accountNumber?: string, customCurrencyName?: string) => {
     const newDef: BankDefinition = {
       id: generateId(),
       name,
       currency,
+      accountNumber,
+      customCurrencyName,
       isActive: true
     };
     setBankDefinitions(prev => [...prev, newDef]);
@@ -409,6 +413,67 @@ const App: React.FC = () => {
 
   const saveFundSnapshot = (snapshot: FundSnapshot) => {
     setFundSnapshots(prev => [snapshot, ...prev]);
+    console.log('✅ [SAVE-SNAPSHOT] تم حفظ المطابقة في الأرشيف');
+  };
+
+  // Protected: Only admin and super_admin can delete banks
+  const deleteBankDefinition = (id: string) => {
+    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'super_admin')) {
+      alert('❌ صلاحية محدودة! فقط المسؤولون يمكنهم حذف الحسابات البنكية.');
+      return;
+    }
+
+    if (!confirm('هل أنت متأكد من حذف هذا الحساب البنكي نهائياً؟\n\nتنبيه: لن يمكنك استعادته.')) {
+      return;
+    }
+
+    setBankDefinitions(prev => prev.filter(def => def.id !== id));
+    console.log('✅ [DELETE-BANK] تم حذف الحساب البنكي');
+  };
+
+  // Protected: Only super_admin can delete snapshots
+  const deleteFundSnapshot = (id: string) => {
+    if (!currentUser || currentUser.role !== 'super_admin') {
+      alert('❌ صلاحية محدودة! فقط مدير النظام يمكنه حذف السجلات.');
+      return;
+    }
+
+    if (!confirm('هل أنت متأكد من حذف هذه المطابقة نهائياً؟\n\nتحذير: لن يمكنك استعادة البيانات!')) {
+      return;
+    }
+
+    setFundSnapshots(prev => prev.filter(snap => snap.id !== id));
+    console.log('✅ [DELETE-SNAPSHOT] تم حذف المطابقة من الأرشيف');
+  };
+
+  // Edit snapshot: Load data back for re-editing (super_admin only)
+  const editFundSnapshot = (id: string): FundLineItem[] => {
+    if (!currentUser || currentUser.role !== 'super_admin') {
+      alert('❌ صلاحية محدودة! فقط مدير النظام يمكنه تعديل السجلات.');
+      return [];
+    }
+
+    const snap = fundSnapshots.find(s => s.id === id);
+    if (!snap) {
+      alert('❌ لم يتم العثور على المطابقة!');
+      return [];
+    }
+
+    // Combine all line items
+    const allItems = [
+      ...snap.oldRiyalItems,
+      ...snap.newRiyalItems,
+      ...(snap.sarItems || []),
+      ...(snap.blueUsdItems || []),
+      ...(snap.whiteUsdItems || []),
+      ...(snap.customCurrencyItems || [])
+    ];
+
+    // Remove from snapshots (will be re-added when approved again)
+    setFundSnapshots(prev => prev.filter(s => s.id !== id));
+    console.log('✅ [EDIT-SNAPSHOT] تم تحميل المطابقة للتعديل');
+
+    return allItems;
   };
 
   // --- Color Customization Functions ---
@@ -477,8 +542,11 @@ const App: React.FC = () => {
     bankDefinitions,
     addBankDefinition,
     toggleBankDefinition,
+    deleteBankDefinition,
     fundSnapshots,
-    saveFundSnapshot
+    saveFundSnapshot,
+    deleteFundSnapshot,
+    editFundSnapshot
   };
 
   return (

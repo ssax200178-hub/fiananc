@@ -28,10 +28,14 @@ export interface ReconData {
 }
 
 // Funds Data Types
+export type FundsCurrency = 'old_riyal' | 'new_riyal' | 'sar' | 'blue_usd' | 'white_usd' | 'custom';
+
 export interface BankDefinition {
     id: string;
     name: string;
-    currency: 'old_riyal' | 'new_riyal';
+    currency: FundsCurrency;
+    customCurrencyName?: string; // For custom currencies
+    accountNumber?: string; // Account number for display
     isActive: boolean;
 }
 
@@ -73,10 +77,26 @@ export interface FundSnapshot {
     date: string; // DD/MM/YYYY
     fullTimestamp: string;
     user: string;
+
+    // Local Currencies
     oldRiyalItems: FundLineItem[];
     newRiyalItems: FundLineItem[];
     totalVarianceOld: number;
     totalVarianceNew: number;
+
+    // Foreign Currencies
+    sarItems?: FundLineItem[];
+    blueUsdItems?: FundLineItem[];
+    whiteUsdItems?: FundLineItem[];
+    customCurrencyItems?: FundLineItem[];
+    totalVarianceSar?: number;
+    totalVarianceBlueUsd?: number;
+    totalVarianceWhiteUsd?: number;
+    totalVarianceCustom?: number;
+
+    // Status & Permissions
+    status?: 'draft' | 'completed' | 'approved';
+    canEdit?: boolean;
 }
 
 export interface AppContextType {
@@ -115,12 +135,15 @@ export interface AppContextType {
 
     // Funds / Bank Configuration
     bankDefinitions: BankDefinition[];
-    addBankDefinition: (name: string, currency: 'old_riyal' | 'new_riyal') => void;
+    addBankDefinition: (name: string, currency: FundsCurrency, accountNumber?: string, customCurrencyName?: string) => void;
     toggleBankDefinition: (id: string) => void;
+    deleteBankDefinition: (id: string) => void; // Admin+ only
 
     // Funds Snapshots
     fundSnapshots: FundSnapshot[];
     saveFundSnapshot: (snapshot: FundSnapshot) => void;
+    deleteFundSnapshot: (id: string) => void; // Super_admin only
+    editFundSnapshot: (id: string) => FundLineItem[]; // Returns line items for editing
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
