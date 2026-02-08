@@ -208,8 +208,8 @@ const FundsPage: React.FC = () => {
                 <button
                     onClick={() => setActiveTab('local')}
                     className={`flex-1 py-4 px-6 text-lg font-bold transition-all ${activeTab === 'local'
-                            ? 'bg-[#263238] dark:bg-[#4FC3F7] text-white border-b-4 border-[#C62828]'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        ? 'bg-[#263238] dark:bg-[#4FC3F7] text-white border-b-4 border-[#C62828]'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
                         }`}
                 >
                     <span className="flex items-center justify-center gap-2">
@@ -220,8 +220,8 @@ const FundsPage: React.FC = () => {
                 <button
                     onClick={() => setActiveTab('foreign')}
                     className={`flex-1 py-4 px-6 text-lg font-bold transition-all ${activeTab === 'foreign'
-                            ? 'bg-[#263238] dark:bg-[#4FC3F7] text-white border-b-4 border-[#C62828]'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        ? 'bg-[#263238] dark:bg-[#4FC3F7] text-white border-b-4 border-[#C62828]'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
                         }`}
                 >
                     <span className="flex items-center justify-center gap-2">
@@ -618,8 +618,8 @@ const AddBankModal = ({ newBankName, setNewBankName, newBankCurrency, setNewBank
                                     key={opt.value}
                                     onClick={() => setNewBankCurrency(opt.value)}
                                     className={`py-2 px-3 rounded-md text-sm font-bold border-2 transition-all ${newBankCurrency === opt.value
-                                            ? `border-current ${opt.color} bg-current/10`
-                                            : 'border-slate-300 dark:border-slate-600 text-slate-500'
+                                        ? `border-current ${opt.color} bg-current/10`
+                                        : 'border-slate-300 dark:border-slate-600 text-slate-500'
                                         }`}
                                 >
                                     {opt.label}
@@ -649,112 +649,143 @@ const AddBankModal = ({ newBankName, setNewBankName, newBankCurrency, setNewBank
     );
 };
 
-// Report Modal Component (Enhanced for Print)
+// Report Modal Component (Optimized A4 Layout + Image Export)
 const ReportModal = ({ snapshot, setReportSnapshot }: any) => {
+    const downloadAsImage = async () => {
+        const html2canvas = (await import('html2canvas')).default;
+        const element = document.getElementById('snapshot-print-area');
+        if (!element) return;
+
+        try {
+            const canvas = await html2canvas(element, {
+                scale: 2, // High quality
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#ffffff',
+                width: 794, // A4 width in pixels at 96 DPI
+                height: 1123 // A4 height in pixels at 96 DPI
+            });
+
+            // Download as PNG
+            const link = document.createElement('a');
+            link.download = `مطابقة-صناديق-${snapshot.date.replace(/\//g, '-')}.png`;
+            link.href = canvas.toDataURL('image/png', 1.0);
+            link.click();
+        } catch (error) {
+            console.error('Error generating image:', error);
+            alert('حدث خطأ أثناء إنشاء الصورة. يرجى المحاولة مرة أخرى.');
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto">
             <div className="bg-white text-slate-900 w-full max-w-4xl rounded-none shadow-2xl overflow-hidden flex flex-col my-8 print:max-w-none print:my-0">
-                {/* Print Area - A4 optimized */}
-                <div id="snapshot-print-area" className="p-10 bg-white relative print:p-6">
-                    {/* Header */}
-                    <div className="border-b-4 border-[#263238] pb-6 mb-8 flex justify-between items-end">
+                {/* Optimized Print Area - A4 */}
+                <div id="snapshot-print-area" className="bg-white relative" style={{ width: '794px', padding: '20px' }}>
+                    {/* Compact Header */}
+                    <div className="border-b-2 border-[#263238] pb-2 mb-3 flex justify-between items-center">
                         <div>
-                            <h1 className="text-4xl font-black uppercase tracking-tight mb-2 text-[#C62828]">توصيل ون</h1>
-                            <p className="text-[#607D8B] font-bold text-sm uppercase tracking-widest">Daily Funds Reconciliation</p>
+                            <h1 className="text-2xl font-black text-[#C62828]">توصيل ون</h1>
+                            <p className="text-xs text-[#607D8B] font-bold">مطابقة الصناديق اليومية</p>
                         </div>
                         <div className="text-right">
-                            <div className="text-4xl font-black text-[#263238]">#{snapshot.id.slice(-4)}</div>
-                            <div className="font-mono font-bold mt-1 text-[#607D8B]">{snapshot.date}</div>
+                            <div className="text-xl font-black text-[#263238]">#{snapshot.id.slice(-4)}</div>
+                            <div className="text-sm font-bold text-[#607D8B]">{snapshot.date}</div>
                         </div>
                     </div>
 
-                    {/* Meta */}
-                    <div className="grid grid-cols-2 gap-8 mb-8 text-sm">
+                    {/* Compact Meta */}
+                    <div className="grid grid-cols-2 gap-4 mb-3 text-xs">
                         <div>
-                            <span className="block text-slate-400 uppercase text-xs font-bold tracking-wider">الموظف المسؤول</span>
-                            <span className="block font-bold text-lg">{snapshot.user}</span>
+                            <span className="text-slate-400 font-bold">الموظف: </span>
+                            <span className="font-bold text-slate-900">{snapshot.user}</span>
                         </div>
                         <div className="text-right">
-                            <span className="block text-slate-400 uppercase text-xs font-bold tracking-wider">وقت الإغلاق</span>
-                            <span className="block font-bold font-mono text-lg">{snapshot.fullTimestamp}</span>
+                            <span className="text-slate-400 font-bold">الوقت: </span>
+                            <span className="font-bold font-mono text-slate-900">{snapshot.fullTimestamp}</span>
                         </div>
                     </div>
 
-                    {/* All Currency Tables */}
-                    <div className="space-y-6">
-                        <SnapshotTable title="ريال قديم (Old Riyal)" items={snapshot.oldRiyalItems} totalVariance={snapshot.totalVarianceOld} />
-                        <SnapshotTable title="ريال جديد (New Riyal)" items={snapshot.newRiyalItems} totalVariance={snapshot.totalVarianceNew} />
+                    {/* Compact Currency Tables */}
+                    <div className="space-y-3">
+                        <SnapshotTable title="ريال قديم" items={snapshot.oldRiyalItems} totalVariance={snapshot.totalVarianceOld} />
+                        <SnapshotTable title="ريال جديد" items={snapshot.newRiyalItems} totalVariance={snapshot.totalVarianceNew} />
 
                         {snapshot.sarItems && snapshot.sarItems.length > 0 && (
-                            <SnapshotTable title="ريال سعودي (SAR)" items={snapshot.sarItems} totalVariance={snapshot.totalVarianceSar} />
+                            <SnapshotTable title="ريال سعودي" items={snapshot.sarItems} totalVariance={snapshot.totalVarianceSar} />
                         )}
                         {snapshot.blueUsdItems && snapshot.blueUsdItems.length > 0 && (
-                            <SnapshotTable title="دولار أزرق (Blue USD)" items={snapshot.blueUsdItems} totalVariance={snapshot.totalVarianceBlueUsd} />
+                            <SnapshotTable title="دولار أزرق" items={snapshot.blueUsdItems} totalVariance={snapshot.totalVarianceBlueUsd} />
                         )}
                         {snapshot.whiteUsdItems && snapshot.whiteUsdItems.length > 0 && (
-                            <SnapshotTable title="دولار أبيض (White USD)" items={snapshot.whiteUsdItems} totalVariance={snapshot.totalVarianceWhiteUsd} />
+                            <SnapshotTable title="دولار أبيض" items={snapshot.whiteUsdItems} totalVariance={snapshot.totalVarianceWhiteUsd} />
                         )}
                     </div>
 
-                    {/* Signature */}
-                    <div className="mt-12 pt-8 text-center border-t-2 border-dashed border-slate-300">
-                        <p className="text-xs text-slate-400 uppercase tracking-widest">Electronic Signature: {snapshot.id}</p>
-                        <p className="text-xs text-slate-400">وثيقة رسمية - نظام توصيل ون المالي</p>
+                    {/* Compact Signature */}
+                    <div className="mt-4 pt-2 text-center border-t border-dashed border-slate-300">
+                        <p className="text-[8px] text-slate-400">Electronic ID: {snapshot.id} | نظام توصيل ون المالي</p>
                     </div>
                 </div>
 
-                {/* Actions */}
-                <div className="bg-[#263238] p-6 flex justify-between items-center print:hidden">
+                {/* Action Buttons */}
+                <div className="bg-[#263238] p-4 flex justify-between items-center print:hidden">
                     <button onClick={() => setReportSnapshot(null)} className="text-slate-400 hover:text-white font-bold text-sm">إغلاق</button>
-                    <button
-                        onClick={() => window.print()}
-                        className="px-6 py-3 bg-[#4FC3F7] text-[#263238] rounded-full font-bold flex items-center gap-2 hover:bg-[#29B6F6] transition-colors"
-                    >
-                        <span className="material-symbols-outlined">download</span>
-                        تنزيل الصورة / طباعة
-                    </button>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={downloadAsImage}
+                            className="px-5 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-bold flex items-center gap-2 transition-colors">
+                            <span className="material-symbols-outlined text-sm">image</span>
+                            تنزيل كصورة عالية الجودة
+                        </button>
+                        <button
+                            onClick={() => window.print()}
+                            className="px-5 py-2 bg-[#4FC3F7] text-[#263238] rounded-lg font-bold flex items-center gap-2 hover:bg-[#29B6F6] transition-colors">
+                            <span className="material-symbols-outlined text-sm">print</span>
+                            طباعة
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
     );
 };
 
-// Snapshot Table Helper - Enhanced with all details
+// Snapshot Table Helper - Compact A4 Optimized
 const SnapshotTable = ({ title, items, totalVariance }: any) => (
-    <div>
-        <h4 className="font-black border-b-2 border-black mb-3 uppercase text-sm tracking-wider pb-1">{title}</h4>
-        <table className="w-full text-right text-xs border-2 border-slate-900">
+    <div className="mb-2">
+        <h4 className="font-black border-b-2 border-black mb-1 text-xs pb-0.5">{title}</h4>
+        <table className="w-full text-right border-collapse" style={{ fontSize: '9px' }}>
             <thead>
-                <tr className="bg-slate-900 text-white border-b-2 border-slate-900">
-                    <th className="py-2 px-2 border border-slate-700">الرقم</th>
-                    <th className="py-2 px-2 border border-slate-700">اسم الحساب</th>
-                    <th className="py-2 px-2 border border-slate-700">مبلغ النظام</th>
-                    <th className="py-2 px-2 border border-slate-700">مبلغ البنك</th>
-                    <th className="py-2 px-2 border border-slate-700">الفارق</th>
-                    <th className="py-2 px-2 border border-slate-700">الملاحظة</th>
-                    <th className="py-2 px-2 border border-slate-700">الوقت</th>
+                <tr className="bg-slate-900 text-white">
+                    <th className="py-1 px-1 border border-slate-700" style={{ width: '5%' }}>#</th>
+                    <th className="py-1 px-1 border border-slate-700" style={{ width: '20%' }}>الحساب</th>
+                    <th className="py-1 px-1 border border-slate-700" style={{ width: '15%' }}>النظام</th>
+                    <th className="py-1 px-1 border border-slate-700" style={{ width: '15%' }}>البنك</th>
+                    <th className="py-1 px-1 border border-slate-700" style={{ width: '12%' }}>الفارق</th>
+                    <th className="py-1 px-1 border border-slate-700" style={{ width: '23%' }}>ملاحظة</th>
+                    <th className="py-1 px-1 border border-slate-700" style={{ width: '10%' }}>الوقت</th>
                 </tr>
             </thead>
             <tbody>
                 {items.map((i: any, idx: number) => (
-                    <tr key={i.id} className="border-b border-slate-300">
-                        <td className="py-2 px-2 font-mono border border-slate-300">{idx + 1}</td>
-                        <td className="py-2 px-2 font-bold border border-slate-300">{i.bankName}</td>
-                        <td className="py-2 px-2 font-mono border border-slate-300">{i.sysBalance.toLocaleString()}</td>
-                        <td className="py-2 px-2 font-mono border border-slate-300">{i.bankBalance.toLocaleString()}</td>
-                        <td className={`py-2 px-2 font-mono font-bold border border-slate-300 ${i.variance !== 0 ? 'text-red-600' : 'text-green-600'}`}>{i.variance.toLocaleString()}</td>
-                        <td className="py-2 px-2 text-xs border border-slate-300">{i.notes || '-'}</td>
-                        <td className="py-2 px-2 font-mono border border-slate-300">{i.completedAt || '-'}</td>
+                    <tr key={i.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                        <td className="py-0.5 px-1 font-mono border border-slate-300">{idx + 1}</td>
+                        <td className="py-0.5 px-1 font-bold border border-slate-300">{i.bankName}</td>
+                        <td className="py-0.5 px-1 font-mono border border-slate-300">{i.sysBalance.toLocaleString()}</td>
+                        <td className="py-0.5 px-1 font-mono border border-slate-300">{i.bankBalance.toLocaleString()}</td>
+                        <td className={`py-0.5 px-1 font-mono font-bold border border-slate-300 ${i.variance !== 0 ? 'text-red-600' : 'text-green-600'}`}>{i.variance.toLocaleString()}</td>
+                        <td className="py-0.5 px-1 border border-slate-300" style={{ fontSize: '8px' }}>{i.notes || '-'}</td>
+                        <td className="py-0.5 px-1 font-mono border border-slate-300">{i.completedAt || '-'}</td>
                     </tr>
                 ))}
             </tbody>
-            {/* Currency Total */}
-            <tfoot className="bg-amber-200 border-t-4 border-amber-600">
+            <tfoot className="bg-amber-200 border-t-2 border-amber-600">
                 <tr>
-                    <td colSpan={2} className="py-2 px-2 font-black border border-slate-700">الإجمالي - {title}</td>
-                    <td className="py-2 px-2 font-mono font-bold border border-slate-700">{items.reduce((a: number, b: any) => a + b.sysBalance, 0).toLocaleString()}</td>
-                    <td className="py-2 px-2 font-mono font-bold border border-slate-700">{items.reduce((a: number, b: any) => a + b.bankBalance, 0).toLocaleString()}</td>
-                    <td className={`py-2 px-2 font-mono font-black text-base border border-slate-700 ${totalVariance === 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    <td colSpan={2} className="py-1 px-1 font-black border border-slate-700">الإجمالي</td>
+                    <td className="py-1 px-1 font-mono font-bold border border-slate-700">{items.reduce((a: number, b: any) => a + b.sysBalance, 0).toLocaleString()}</td>
+                    <td className="py-1 px-1 font-mono font-bold border border-slate-700">{items.reduce((a: number, b: any) => a + b.bankBalance, 0).toLocaleString()}</td>
+                    <td className={`py-1 px-1 font-mono font-black border border-slate-700 ${totalVariance === 0 ? 'text-green-700' : 'text-red-700'}`}>
                         {totalVariance.toLocaleString()}
                     </td>
                     <td colSpan={2} className="border border-slate-700"></td>
