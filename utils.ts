@@ -11,37 +11,6 @@ export function generateId(): string {
 }
 
 /**
- * تشفير كلمة المرور باستخدام SHA-256
- * @param password - كلمة المرور النصية
- * @returns Promise بـ hash مشفر
- */
-export async function hashPassword(password: string): Promise<string> {
-    try {
-        if (typeof crypto !== 'undefined' && crypto.subtle && crypto.subtle.digest) {
-            const encoder = new TextEncoder();
-            const data = encoder.encode(password);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-            return hashHex;
-        } else {
-            // Fallback for non-secure contexts (e.g. HTTP IP)
-            console.warn("Secure context not available - using basic hash fallback");
-            let hash = 0;
-            for (let i = 0; i < password.length; i++) {
-                const char = password.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash; // Convert to 32bit integer
-            }
-            return hash.toString(16);
-        }
-    } catch (e) {
-        console.error("Hashing error", e);
-        return password.split('').reverse().join(''); // Last resort fallback
-    }
-}
-
-/**
  * حفظ البيانات في LocalStorage
  * @param key - مفتاح التخزين
  * @param data - البيانات للحفظ (سيتم تحويلها لـ JSON)
@@ -51,17 +20,9 @@ export function saveToStorage<T>(key: string, data: T): boolean {
     try {
         const jsonData = JSON.stringify(data);
         localStorage.setItem(key, jsonData);
-        console.log(`✅ [STORAGE] تم حفظ البيانات بنجاح: ${key}`);
         return true;
     } catch (error: any) {
-        // Check for quota exceeded error
-        if (error.name === 'QuotaExceededError' || error.code === 22) {
-            console.error('❌ [STORAGE] مساحة التخزين ممتلئة! يرجى حذف بيانات قديمة أو تصدير البيانات.');
-            alert('⚠️ مساحة التخزين ممتلئة! يرجى تصدير البيانات وحذف السجلات القديمة.');
-        } else {
-            console.error('❌ [STORAGE] خطأ في حفظ البيانات:', error);
-            alert('⚠️ فشل حفظ البيانات! تحقق من إعدادات المتصفح.');
-        }
+        console.error('❌ [STORAGE] خطأ في حفظ البيانات:', error);
         return false;
     }
 }
@@ -76,15 +37,12 @@ export function loadFromStorage<T>(key: string, defaultValue: T): T {
     try {
         const jsonData = localStorage.getItem(key);
         if (jsonData === null) {
-            console.log(`ℹ️ [STORAGE] لا توجد بيانات محفوظة لـ: ${key}`);
             return defaultValue;
         }
         const parsed = JSON.parse(jsonData) as T;
-        console.log(`✅ [STORAGE] تم تحميل البيانات بنجاح: ${key}`);
         return parsed;
     } catch (error) {
         console.error('❌ [STORAGE] خطأ في تحميل البيانات:', error);
-        console.warn('⚠️ [STORAGE] سيتم استخدام القيم الافتراضية');
         return defaultValue;
     }
 }
@@ -134,6 +92,65 @@ export function formatNumber(num: number): string {
  * @returns true إذا كان رقم صحيح
  */
 export function isValidNumber(value: string | number): boolean {
-    const num = typeof value === 'string' ? parseFloat(value.replace(/,/g, '')) : value;
+    if (value === undefined || value === null || value === '') return false;
+    if (typeof value === 'number') return isFinite(value);
+
+    const str = String(value).trim();
+    // Must contain at least one digit to be a number
+    if (!/\d/.test(str)) return false;
+
+    const num = parseNumber(value);
     return !isNaN(num) && isFinite(num);
+}
+
+/**
+ * تحويل النص إلى رقم مع دعم الفواصل العشرية المختلفة
+ * يدعم: 1,234.56 (US) و 1.234,56 (EU)
+ */
+export function parseNumber(value: string | number | undefined | null): number {
+    if (value === undefined || value === null || value === '') return 0;
+    if (typeof value === 'number') return value;
+
+    let clean = value.toString().trim();
+    // Remove currency symbols and standard text
+    clean = clean.replace(/[^\d.,-]/g, '');
+
+    if (!clean) return 0;
+
+    // Case 1: Contains both . and , (e.g. 1,234.56 or 1.234,56)
+    if (clean.includes('.') && clean.includes(',')) {
+        const lastDot = clean.lastIndexOf('.');
+        const lastComma = clean.lastIndexOf(',');
+
+        if (lastComma > lastDot) {
+            // Comma is decimal (1.234,56)
+            clean = clean.replace(/\./g, '').replace(',', '.');
+        } else {
+            // Dot is decimal (1,234.56)
+            clean = clean.replace(/,/g, '');
+        }
+    }
+    // Case 2: Only Comma (e.g. 1,5 or 1,234)
+    else if (clean.includes(',')) {
+        // Heuristic: If matches exactly standard thousands format (1,234 or 12,345,678), treat as integer
+        // BUT, user explicitly wants decimals. "1,5" -> 1.5. "1,234" -> 1234?
+        // Let's check the part AFTER the last comma.
+        const parts = clean.split(',');
+        const lastPart = parts[parts.length - 1];
+
+        // If last part is NOT 3 digits, it's definitely a decimal (e.g. 1,5 or 12,34)
+        if (lastPart.length !== 3) {
+            clean = clean.replace(/,/g, '.');
+        } else {
+            // Ambiguous: 1,234. Could be 1.234 or 1234.
+            // In a financial tool allowing decimals, usually entering "1,234" implies thousands.
+            // Entering "1,234.00" makes it clear.
+            // We will assume it is thousands separator here to be safe, unless there are multiple commas (1,234,567)
+            // If only one comma and 3 digits: 1,234 -> 1234
+            clean = clean.replace(/,/g, '');
+        }
+    }
+    // Case 3: Only Dot (Standard JS) -> Keep as is
+
+    return parseFloat(clean);
 }

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../AppContext';
 
-const Layout: React.FC = () => {
+const Layout = () => {
     const { theme, toggleTheme, currentUser, logout } = useAppContext();
     const location = useLocation();
     const navigate = useNavigate();
@@ -10,12 +10,31 @@ const Layout: React.FC = () => {
 
     if (!currentUser) return <Outlet />;
 
+    // SECURITY: Immediate guard if user is disabled while active
+    if (currentUser.isActive === false) {
+        logout();
+        return null;
+    }
+
     const navItems = [
-        { label: 'الرئيسية', path: '/', icon: 'dashboard' },
-        { label: 'مطابقة المطاعم', path: '/input', icon: 'restaurant' },
-        { label: 'مطابقة الصناديق', path: '/funds', icon: 'account_balance' },
-        { label: 'الإعدادات', path: '/settings', icon: 'settings' },
-    ];
+        { label: 'الرئيسية', path: '/', icon: 'dashboard', permission: 'view_dashboard' },
+        { label: 'مطابقة المطاعم', path: '/input', icon: 'restaurant', permission: 'manage_funds' },
+        { label: 'دليل المطاعم', path: '/restaurants', icon: 'storefront', permission: 'manage_restaurants' },
+        { label: 'مطابقة الصناديق', path: '/funds', icon: 'account_balance', permission: 'manage_funds' },
+        { label: 'سداد المطاعم', path: '/restaurant-payments', icon: 'payments', permission: 'manage_funds' },
+        { label: 'أرشيف الكشوفات', path: '/archives', icon: 'inventory_2', permission: 'manage_funds' },
+        { label: 'سجل النظام', path: '/activity-logs', icon: 'history_edu', permission: 'view_activity_logs' },
+        { label: 'الإعدادات', path: '/settings', icon: 'settings' }, // Settings always visible for personal changes
+    ].filter(item => {
+        // Super admin sees everything
+        if (currentUser.role === 'super_admin') return true;
+
+        // If no specific permission required, it's public (like Settings)
+        if (!item.permission) return true;
+
+        // Check if user has explicit permission
+        return currentUser.permissions?.includes(item.permission as any);
+    });
 
     return (
         <div className={`min-h-screen transition-colors duration-300 font-sans flex overflow-hidden`}>
@@ -27,12 +46,10 @@ const Layout: React.FC = () => {
             >
                 <div className="p-6 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="size-10 bg-[var(--color-header)] rounded-xl flex items-center justify-center text-white shadow-lg">
-                            <span className="material-symbols-outlined text-2xl">local_shipping</span>
-                        </div>
+                        <img src="/logo.png" alt="توصيل ون - الادارة المالية" className="h-12 w-auto" />
                         <div>
                             <h1 className="font-black text-lg leading-tight">توصيل ون</h1>
-                            <p className="text-[10px] text-[var(--color-active)] font-bold tracking-wide">النظام المالي</p>
+                            <p className="text-[10px] text-[var(--color-active)] font-bold tracking-wide">الادارة المالية</p>
                         </div>
                     </div>
                     {/* Mobile Close Button */}
@@ -66,13 +83,17 @@ const Layout: React.FC = () => {
                 </nav>
 
                 <div className="absolute bottom-0 w-full p-4 border-t border-white/10 bg-[var(--color-sidebar)] brightness-90">
-                    <div className="flex items-center gap-3 mb-4 px-2">
-                        <div className="size-10 rounded-full bg-white/10 flex items-center justify-center font-bold text-[var(--color-active)]">
+                    <div
+                        onClick={() => navigate('/settings', { state: { openAccount: true } })}
+                        className="flex items-center gap-3 mb-4 px-2 cursor-pointer hover:bg-white/5 rounded-lg py-2 transition-colors group"
+                        title="تغيير كلمة المرور والإعدادات"
+                    >
+                        <div className="size-10 rounded-full bg-white/10 flex items-center justify-center font-bold text-[var(--color-active)] group-hover:bg-white/20 transition-colors">
                             {currentUser.username.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                            <p className="font-bold text-sm truncate max-w-[120px]">{currentUser.name || currentUser.username}</p>
-                            <p className="text-xs text-slate-500 capitalize">{currentUser.role === 'super_admin' ? 'مدير النظام' : currentUser.role === 'admin' ? 'مسؤول' : 'موظف'}</p>
+                            <p className="font-bold text-sm truncate max-w-[120px] group-hover:text-[var(--color-active)] transition-colors">{currentUser.name || currentUser.username}</p>
+                            <p className="text-xs text-slate-500 capitalize">{currentUser.role === 'super_admin' ? 'مهندس النظام' : currentUser.role === 'admin' ? 'مسؤول' : 'موظف'}</p>
                         </div>
                     </div>
                     <button

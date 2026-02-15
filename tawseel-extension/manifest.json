@@ -1,0 +1,26 @@
+{
+    "manifest_version": 3,
+    "name": "مساعد توصيل ون - استخراج الأرصدة",
+    "version": "1.0",
+    "description": "إضافة لسحب أرصدة المطاعم من نظام توصيل ون وإرسالها لتطبيق المطابقة المالية.",
+    "permissions": [
+        "activeTab",
+        "scripting"
+    ],
+    "content_scripts": [
+        {
+            "matches": [
+                "https://tawseel.app/*",
+                "https://*.tawseel.app/*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "run_at": "document_end",
+            "all_frames": true
+        }
+    ],
+    "icons": {
+        "48": "icon.png"
+    }
+}

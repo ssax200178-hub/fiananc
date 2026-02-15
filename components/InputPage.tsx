@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext, Currency } from '../AppContext';
+import { parseNumber } from '../utils';
 
 // Declare XLSX globally since we added it via script tag in index.html
 declare var XLSX: any;
@@ -150,9 +151,13 @@ const InputPage: React.FC = () => {
       // 1. Clean Amount
       let amt = row[amountIdx];
       if (typeof amt === 'string') {
-        amt = amt.replace(/[^0-9.-]/g, ''); // Remove currency symbols, commas
+        // Allow dots, commas, and negative signs
+        amt = amt.replace(/[^0-9.,-]/g, '');
       }
-      if (!amt || isNaN(parseFloat(amt))) amt = '0';
+
+      // Use efficient parsing that handles "1.234,56" or "1,234.56"
+      const parsedAmt = parseNumber(amt);
+      amt = isNaN(parsedAmt) ? '0' : String(parsedAmt);
 
       // 2. Parse Date (Handle Excel Serial)
       let date = row[dateIdx];

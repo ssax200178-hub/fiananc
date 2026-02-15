@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../AppContext';
+import { parseNumber } from '../utils';
 
 // Declare XLSX globally
 declare var XLSX: any;
@@ -27,7 +28,7 @@ type DisplayItem =
 
 const AnalysisPage: React.FC = () => {
     const navigate = useNavigate();
-    const { currentData, updateCurrentData, resetCurrentData, currency, theme, updateHistoryItem } = useAppContext();
+    const { currentData, updateCurrentData, resetCurrentData, currency, theme, colors, updateHistoryItem } = useAppContext();
 
     // UI States
     const [activeTab, setActiveTab] = useState<'analysis' | 'ledger'>('analysis');
@@ -36,12 +37,12 @@ const AnalysisPage: React.FC = () => {
     const [expandedRow, setExpandedRow] = useState<string | null>(null); // For Details Expansion
     const [activeLinkRow, setActiveLinkRow] = useState<string | null>(null); // For Manual Link Input toggle
 
-    // Color Settings State
-    const [colors, setColors] = useState({
+    // Color Constants
+    const COLORS = {
         positive: '#d97706', // amber-600
         negative: '#dc2626', // red-600
         matched: '#10b981'   // emerald-500
-    });
+    };
 
     // Matching Settings
     const [matchSettings, setMatchSettings] = useState({
@@ -108,12 +109,12 @@ const AnalysisPage: React.FC = () => {
             let ref = 'N/A';
 
             const amountIndex = parts.findIndex(p => {
-                const cleaned = p.replace(/,/g, '');
-                return !isNaN(parseFloat(cleaned)) && isFinite(Number(cleaned)) && !p.includes('/');
+                const val = parseNumber(p);
+                return !isNaN(val) && isFinite(val) && !p.includes('/');
             });
 
             if (amountIndex !== -1) {
-                amount = parseFloat(parts[amountIndex].replace(/,/g, ''));
+                amount = parseNumber(parts[amountIndex]);
             }
 
             const dateIndex = parts.findIndex((p, idx) => idx !== amountIndex && (p.includes('/') || p.includes('-')));
@@ -574,12 +575,12 @@ const AnalysisPage: React.FC = () => {
                     <div className="p-4 bg-white dark:bg-[#1e293b] rounded-2xl border border-[#e2e8f0] dark:border-[#1e293b] shadow-sm relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-10"><span className="material-symbols-outlined text-6xl">warning</span></div>
                         <p className="text-slate-500 text-xs font-bold mb-1">عدد القيود غير المطابقة</p>
-                        <h3 className="text-3xl font-black" style={{ color: colors.negative }}>{analysisResult.totalUnmatchedCount}</h3>
+                        <h3 className="text-3xl font-black" style={{ color: COLORS.negative }}>{analysisResult.totalUnmatchedCount}</h3>
                     </div>
                     <div className="p-4 bg-white dark:bg-[#1e293b] rounded-2xl border border-[#e2e8f0] dark:border-[#1e293b] shadow-sm relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-10"><span className="material-symbols-outlined text-6xl">account_balance</span></div>
                         <p className="text-slate-500 text-xs font-bold mb-1">الفارق الإجمالي (Total Variance)</p>
-                        <h3 className="text-3xl font-black font-mono dir-ltr" style={{ color: Math.abs(analysisResult.totalVariance) < 0.1 ? colors.matched : colors.negative }}>
+                        <h3 className="text-3xl font-black font-mono dir-ltr" style={{ color: Math.abs(analysisResult.totalVariance) < 0.1 ? COLORS.matched : COLORS.negative }}>
                             {analysisResult.totalVariance.toLocaleString()} {currency}
                         </h3>
                     </div>
@@ -612,26 +613,6 @@ const AnalysisPage: React.FC = () => {
                                         مطابقة صارمة للتاريخ (يجب تطابق التاريخ تماماً في مطابقة المبالغ)
                                     </span>
                                 </label>
-                            </div>
-                        </div>
-                        <div>
-                            <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-pink-500">palette</span>
-                                تخصيص الألوان
-                            </h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div className="flex items-center gap-2 p-3 bg-white dark:bg-[#0f172a] rounded-lg border border-[#e2e8f0] dark:border-[#334155]">
-                                    <input type="color" value={colors.positive} onChange={e => setColors(p => ({ ...p, positive: e.target.value }))} className="size-8 rounded cursor-pointer border-none" />
-                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">الفائض (Income)</span>
-                                </div>
-                                <div className="flex items-center gap-2 p-3 bg-white dark:bg-[#0f172a] rounded-lg border border-[#e2e8f0] dark:border-[#334155]">
-                                    <input type="color" value={colors.negative} onChange={e => setColors(p => ({ ...p, negative: e.target.value }))} className="size-8 rounded cursor-pointer border-none" />
-                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">العجز (Deficit)</span>
-                                </div>
-                                <div className="flex items-center gap-2 p-3 bg-white dark:bg-[#0f172a] rounded-lg border border-[#e2e8f0] dark:border-[#334155]">
-                                    <input type="color" value={colors.matched} onChange={e => setColors(p => ({ ...p, matched: e.target.value }))} className="size-8 rounded cursor-pointer border-none" />
-                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">مطابق (Matched)</span>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -763,7 +744,7 @@ const AnalysisPage: React.FC = () => {
                                                     <TdSemibold>{row.date}</TdSemibold>
                                                     <TdMono>{row.cTotal.toLocaleString()} {currency}</TdMono>
                                                     <TdMono>{row.rTotal.toLocaleString()} {currency}</TdMono>
-                                                    <td className="px-6 py-5 text-sm font-mono font-bold" style={{ color: Math.abs(row.variance) < 0.1 ? colors.matched : colors.negative }}>
+                                                    <td className="px-6 py-5 text-sm font-mono font-bold" style={{ color: Math.abs(row.variance) < 0.1 ? COLORS.matched : COLORS.negative }}>
                                                         {row.variance.toLocaleString()}
                                                     </td>
                                                     <td className="px-6 py-5">
@@ -782,13 +763,13 @@ const AnalysisPage: React.FC = () => {
                                                 <td className="px-6 py-6 text-base font-black text-slate-900 dark:text-white">الإجمالي الكلي</td>
                                                 <td className="px-6 py-6 text-base font-bold font-mono text-[#3b82f6]">{analysisResult.grandTotalC.toLocaleString()} {currency}</td>
                                                 <td className="px-6 py-6 text-base font-bold font-mono text-[#3b82f6]">{analysisResult.grandTotalR.toLocaleString()} {currency}</td>
-                                                <td className="px-6 py-6 text-base font-black font-mono" style={{ color: Math.abs(analysisResult.totalVariance) < 0.1 ? colors.matched : colors.negative }}>
+                                                <td className="px-6 py-6 text-base font-black font-mono" style={{ color: Math.abs(analysisResult.totalVariance) < 0.1 ? COLORS.matched : COLORS.negative }}>
                                                     {analysisResult.totalVariance.toLocaleString()} {currency}
                                                 </td>
                                                 <td className="px-6 py-6 text-center">
                                                     {Math.abs(analysisResult.totalVariance) < 0.1 ?
-                                                        <span className="text-xs font-bold text-white px-3 py-1 rounded-full" style={{ backgroundColor: colors.matched }}>تطابق تام</span> :
-                                                        <span className="text-xs font-bold text-white px-3 py-1 rounded-full" style={{ backgroundColor: colors.negative }}>يوجد فروقات</span>
+                                                        <span className="text-xs font-bold text-white px-3 py-1 rounded-full" style={{ backgroundColor: COLORS.matched }}>تطابق تام</span> :
+                                                        <span className="text-xs font-bold text-white px-3 py-1 rounded-full" style={{ backgroundColor: COLORS.negative }}>يوجد فروقات</span>
                                                     }
                                                 </td>
                                             </tr>
@@ -872,7 +853,7 @@ const AnalysisPage: React.FC = () => {
                                                                                 <span className="material-symbols-outlined text-[14px]">{isExpanded ? 'expand_less' : 'expand_more'}</span>
                                                                             </button>
                                                                         </div>
-                                                                        <span className="font-black dir-ltr" style={{ color: item.variance < 0 ? colors.negative : colors.positive }}>
+                                                                        <span className="font-black dir-ltr" style={{ color: item.variance < 0 ? COLORS.negative : COLORS.positive }}>
                                                                             {item.variance > 0 ? '+' : ''}{item.variance.toLocaleString()} {currency}
                                                                         </span>
                                                                     </div>
@@ -895,7 +876,7 @@ const AnalysisPage: React.FC = () => {
                                                                             <span className="text-slate-400">-</span>
                                                                             <span className="font-bold text-amber-600">المطعم ({item.rTxn.amount})</span>
                                                                             <span className="text-slate-400">=</span>
-                                                                            <span className="font-black dir-ltr" style={{ color: item.variance < 0 ? colors.negative : colors.positive }}>
+                                                                            <span className="font-black dir-ltr" style={{ color: item.variance < 0 ? COLORS.negative : COLORS.positive }}>
                                                                                 {item.variance.toLocaleString()}
                                                                             </span>
                                                                         </div>

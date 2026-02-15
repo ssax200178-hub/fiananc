@@ -27,25 +27,31 @@ const LoginPage: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-[#102218] p-4 animate-fade-in">
-            <div className="bg-white dark:bg-[#162a1f] w-full max-w-md p-8 rounded-2xl shadow-2xl border border-slate-200 dark:border-[#223d2d] relative overflow-hidden">
-                {/* Decorative Background Element */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#13ec6d] to-blue-500"></div>
+        <div className="min-h-screen flex items-center justify-center bg-[#0f172a] p-4 animate-fade-in relative overflow-hidden">
+            {/* Background Decorative Circles */}
+            <div className="absolute top-[-10%] left-[-10%] size-96 bg-[#ED1C24]/10 rounded-full blur-3xl"></div>
+            <div className="absolute bottom-[-10%] right-[-10%] size-96 bg-[#C62828]/10 rounded-full blur-3xl"></div>
 
-                <div className="text-center mb-8">
-                    <div className="size-16 bg-[#13ec6d]/20 text-[#13ec6d] rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-neon">
-                        <span className="material-symbols-outlined text-4xl">account_balance_wallet</span>
+            <div className="bg-white dark:bg-[#1e293b] w-full max-w-md p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-[#334155] relative overflow-hidden z-10 transition-all">
+                {/* Decorative Top Accent */}
+                <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-[#ED1C24] via-[#FF4D4D] to-[#C62828]"></div>
+
+                <div className="text-center mb-10">
+                    <div className="size-28 bg-white rounded-[2rem] p-4 shadow-2xl flex items-center justify-center mx-auto mb-6 border border-slate-100 dark:border-slate-800 transform hover:scale-105 transition-transform">
+                        <img src="/logo.png" alt="توصيل ون" className="w-full h-full object-contain" />
                     </div>
-                    <h1 className="text-2xl font-black text-slate-900 dark:text-white">تسجيل الدخول</h1>
-                    <p className="text-slate-500 text-sm mt-2">نظام المطابقة المالية الموحد</p>
+                    <h1 className="text-3xl font-black text-slate-900 dark:text-white mb-2">تسجيل الدخول</h1>
+                    <div className="inline-block px-4 py-1.5 bg-red-50 dark:bg-red-900/10 rounded-full">
+                        <p className="text-[#ED1C24] font-black text-xs">الادارة المالية - شركة توصيل ون</p>
+                    </div>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="space-y-2">
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">
+                    <div className="space-y-2 text-right">
+                        <label className="block text-sm font-black text-slate-700 dark:text-slate-300 mr-2">
                             اسم المستخدم
                         </label>
-                        <div className="relative">
+                        <div className="relative group">
                             <input
                                 type="text"
                                 value={username}
@@ -53,20 +59,20 @@ const LoginPage: React.FC = () => {
                                     setUsername(e.target.value);
                                     setError('');
                                 }}
-                                className={`w-full px-4 py-3 rounded-xl border ${error ? 'border-red-500 focus:ring-red-500' : 'border-slate-300 dark:border-[#223d2d] focus:ring-[#13ec6d]'} bg-white dark:bg-[#112218] text-slate-900 dark:text-white focus:ring-2 transition-all outline-none`}
+                                className={`w-full px-5 py-4 rounded-2xl border ${error ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 dark:border-[#334155] focus:ring-[#ED1C24]'} bg-slate-50 dark:bg-[#0f172a] text-slate-900 dark:text-white focus:ring-2 transition-all outline-none font-bold text-right group-hover:border-[#ED1C24]/50`}
                                 placeholder="أدخل اسم المستخدم..."
                                 autoFocus
                                 disabled={isLoading}
                             />
-                            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">person</span>
+                            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ED1C24] transition-colors">person</span>
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">
+                    <div className="space-y-2 text-right">
+                        <label className="block text-sm font-black text-slate-700 dark:text-slate-300 mr-2">
                             كلمة المرور
                         </label>
-                        <div className="relative">
+                        <div className="relative group">
                             <input
                                 type={showPassword ? "text" : "password"}
                                 value={password}
@@ -74,14 +80,14 @@ const LoginPage: React.FC = () => {
                                     setPassword(e.target.value);
                                     setError('');
                                 }}
-                                className={`w-full px-4 py-3 rounded-xl border ${error ? 'border-red-500 focus:ring-red-500' : 'border-slate-300 dark:border-[#223d2d] focus:ring-[#13ec6d]'} bg-white dark:bg-[#112218] text-slate-900 dark:text-white focus:ring-2 transition-all outline-none`}
+                                className={`w-full px-5 py-4 rounded-2xl border ${error ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 dark:border-[#334155] focus:ring-[#ED1C24]'} bg-slate-50 dark:bg-[#0f172a] text-slate-900 dark:text-white focus:ring-2 transition-all outline-none font-bold text-right group-hover:border-[#ED1C24]/50`}
                                 placeholder="أدخل كلمة المرور..."
                                 disabled={isLoading}
                             />
                             <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
-                                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#13ec6d] transition-colors"
+                                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#ED1C24] transition-colors"
                             >
                                 <span className="material-symbols-outlined">
                                     {showPassword ? 'visibility' : 'visibility_off'}
@@ -91,16 +97,16 @@ const LoginPage: React.FC = () => {
                     </div>
 
                     {error && (
-                        <p className="text-xs text-red-500 font-bold flex items-center gap-1 animate-pulse">
-                            <span className="material-symbols-outlined text-sm">error</span>
+                        <div className="p-4 bg-red-50 dark:bg-red-900/15 border border-red-100 dark:border-red-900/30 rounded-2xl text-[13px] text-red-600 dark:text-red-400 font-bold flex items-center gap-3 animate-shake justify-end">
                             {error}
-                        </p>
+                            <span className="material-symbols-outlined text-lg">error</span>
+                        </div>
                     )}
 
                     <button
                         type="submit"
                         disabled={!username.trim() || !password.trim() || isLoading}
-                        className="w-full py-3 bg-[#13ec6d] hover:bg-[#10c95d] disabled:opacity-50 disabled:cursor-not-allowed text-[#102218] font-bold rounded-xl transition-all shadow-lg shadow-[#13ec6d]/20 flex items-center justify-center gap-2"
+                        className="w-full py-4.5 bg-[#ED1C24] hover:bg-[#C62828] disabled:opacity-50 disabled:cursor-not-allowed text-white font-black rounded-2xl transition-all shadow-xl shadow-red-500/25 flex items-center justify-center gap-3 text-lg leading-none active:scale-[0.97] hover:-translate-y-0.5"
                     >
                         {isLoading ? (
                             <>
@@ -116,8 +122,13 @@ const LoginPage: React.FC = () => {
                     </button>
                 </form>
 
-                <div className="mt-8 pt-6 border-t border-slate-100 dark:border-[#223d2d] text-center text-xs text-slate-400">
-                    <p>💡 للاستخدام الداخلي فقط</p>
+                <div className="mt-10 pt-8 border-t border-slate-100 dark:border-[#334155] text-center">
+                    <div className="flex items-center justify-center gap-2 text-slate-400 font-bold text-xs uppercase tracking-tighter">
+                        <span className="material-symbols-outlined text-[1rem]">lock</span>
+                        نظام مشفر ومحمي
+                        <span className="mx-1 opacity-30">|</span>
+                        <span>v1.0.2</span>
+                    </div>
                 </div>
             </div>
         </div>

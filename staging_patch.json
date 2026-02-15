@@ -1,0 +1,12 @@
+{
+    "users": [
+        {
+            "id": "0",
+            "username": "abdr200178",
+            "name": "عبدالرحمن الصغير",
+            "role": "super_admin",
+            "isActive": true,
+            "email": "abdr200178@financial.com"
+        }
+    ]
+}

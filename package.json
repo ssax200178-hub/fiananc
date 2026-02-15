@@ -6,19 +6,27 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "build:test": "vite build --mode staging",
+    "preview": "vite preview",
+    "deploy:test": "npm run build:test && firebase hosting:channel:deploy test-preview",
+    "deploy:live": "npm run build && firebase deploy --only hosting"
   },
   "dependencies": {
     "@types/three": "^0.182.0",
+    "firebase": "^12.9.0",
     "html2canvas": "^1.4.1",
+    "jspdf": "^4.1.0",
+    "jszip": "^3.10.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.0",
-    "three": "^0.182.0"
+    "three": "^0.182.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "firebase-tools": "^15.5.1",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
