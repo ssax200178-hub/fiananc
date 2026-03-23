@@ -4,8 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>نظام المطابقة المالية</title>
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <title>الادارة المالية</title>
   <!-- SheetJS for Excel Parsing -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   <link
@@ -13,37 +12,6 @@
     rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
     rel="stylesheet" />
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            // Screen 1 (Green Theme)
-            "primary-green": "#13ec6d",
-            "bg-green-light": "#f6f8f7",
-            "bg-green-dark": "#102218",
-            "surface-green-dark": "#162a1f",
-
-            // Screen 2 (Blue Theme)
-            "primary-blue": "#3b82f6",
-            "primary-blue-hover": "#2563eb",
-            "match": "#10b981",
-            "bg-blue-dark": "#0f172a",
-            "surface-blue-dark": "#1e293b",
-          },
-          fontFamily: {
-            "display": ["Inter", "Noto Sans Arabic", "sans-serif"],
-            "body": ["Noto Sans Arabic", "Inter", "sans-serif"]
-          },
-          boxShadow: {
-            'glow': '0 0 20px -5px rgba(59, 130, 246, 0.3)',
-            'neon': '0 0 10px rgba(19, 236, 109, 0.4)',
-          }
-        },
-      },
-    }
-  </script>
   <style>
     body {
       font-family: 'Noto Sans Arabic', 'Inter', sans-serif;
@@ -81,6 +49,24 @@
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
     }
 
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(99, 102, 241, 0.2);
+      border-radius: 10px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(99, 102, 241, 0.4);
+    }
+
     .shimmer {
       background: linear-gradient(to right, #1e293b 8%, #334155 18%, #1e293b 33%);
       background-size: 800px 104px;
@@ -97,78 +83,47 @@
       }
     }
 
-    /* === Print Styles: Fix cropping & show full report === */
+    /* =========================================
+       CRITICAL PRINT ISOLATION
+       Injected directly into HTML to override
+       all Tailwind and external CSS rules.
+       ========================================= */
     @media print {
 
-      /* Hide everything except the report */
-      body>*:not(#root) {
+      /* 1. Hide the main React root completely */
+      #root {
         display: none !important;
       }
 
-      /* Reset the fixed modal overlay to static so browser can print full height */
-      .fixed.inset-0 {
-        position: static !important;
+      /* 2. Show the Portal root and let it flow */
+      #print-root {
+        display: block !important;
+        position: relative !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 100% !important;
+        background: white !important;
+        visibility: visible !important;
+        z-index: 999999 !important;
+        overflow: visible !important;
+      }
+
+      /* 3. Reset document height limits */
+      html,
+      body {
+        height: auto !important;
+        min-height: 100% !important;
         overflow: visible !important;
         background: white !important;
-        backdrop-filter: none !important;
-        height: auto !important;
-        min-height: auto !important;
-      }
-
-      /* Reset flex container inside modal */
-      .fixed.inset-0>div {
+        margin: 0 !important;
+        padding: 0 !important;
         display: block !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        min-height: auto !important;
       }
 
-      /* The white card container */
-      .fixed.inset-0 .bg-white.rounded-3xl {
-        box-shadow: none !important;
-        border: none !important;
-        border-radius: 0 !important;
-        max-width: 100% !important;
-        width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-      }
-
-      /* The print area itself - make sure it's fully visible */
-      #snapshot-print-area {
-        width: 100% !important;
-        max-width: 100% !important;
-        padding: 20px !important;
-        margin: 0 !important;
-        overflow: visible !important;
-        page-break-inside: avoid;
-      }
-
-      /* Hide action buttons bar */
-      .bg-\[\#1e293b\] {
-        display: none !important;
-      }
-
-      /* Ensure tables don't break across pages awkwardly */
-      table {
-        page-break-inside: auto;
-      }
-
-      tr {
-        page-break-inside: avoid;
-        page-break-after: auto;
-      }
-
-      /* Remove dark backgrounds and shadows */
-      * {
-        box-shadow: none !important;
-        text-shadow: none !important;
-      }
-
-      /* Set page margins */
+      /* 4. Global Page Settings */
       @page {
-        margin: 10mm;
         size: A4;
+        margin: 0;
       }
     }
   </style>
@@ -186,6 +141,7 @@
 </head>
 
 <body class="font-body selection:bg-primary-blue selection:text-white">
+  <div id="print-root"></div>
   <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

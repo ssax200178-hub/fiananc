@@ -1,0 +1,868 @@
+{
+  "fundSnapshots": [],
+  "currency": "YER",
+  "history": [],
+  "colorScheme": {
+    "background": "#F5F5F5",
+    "sidebar": "#263238",
+    "success": "#4CAF50",
+    "link": "#4FC3F7",
+    "active": "#FFB300",
+    "header": "#C62828"
+  },
+  "bankDefinitions": [
+    {
+      "id": "bank_1770860211905_p8sdc",
+      "accountNumber": "1",
+      "name": "فلوسك",
+      "isActive": true,
+      "currency": "old_riyal"
+    },
+    {
+      "accountNumber": "2",
+      "isActive": true,
+      "currency": "old_riyal",
+      "id": "bank_1770860211906_i47wm",
+      "name": "محفظة موبايل موني كاك بنك"
+    },
+    {
+      "id": "bank_1770860211907_9m9wu",
+      "accountNumber": "3",
+      "currency": "old_riyal",
+      "isActive": true,
+      "name": "تطبيق موبايل موني 77400.8189"
+    },
+    {
+      "accountNumber": "4",
+      "currency": "old_riyal",
+      "name": "محفظة جوالي تاجر",
+      "isActive": true,
+      "id": "bank_1770860211908_w6pr5"
+    },
+    {
+      "id": "bank_1770860211909_tik2g",
+      "accountNumber": "5",
+      "currency": "old_riyal",
+      "isActive": true,
+      "name": "صندوق نعمان"
+    },
+    {
+      "accountNumber": "6",
+      "id": "bank_1770860211910_armvp",
+      "name": "جوالي شركات",
+      "currency": "old_riyal",
+      "isActive": true
+    },
+    {
+      "accountNumber": "7",
+      "id": "bank_1770860211911_fx1mm",
+      "isActive": true,
+      "name": "محفظة جوالي موصلين",
+      "currency": "old_riyal"
+    },
+    {
+      "accountNumber": "8",
+      "id": "bank_1770860211912_wv5qf",
+      "currency": "old_riyal",
+      "isActive": true,
+      "name": "الحزمي للصرافة 114754.61"
+    },
+    {
+      "id": "bank_1770860211913_1dz9r",
+      "accountNumber": "9",
+      "name": "جمعان للصرافة",
+      "isActive": true,
+      "currency": "old_riyal"
+    },
+    {
+      "accountNumber": "10",
+      "id": "bank_1770860211914_b8e21",
+      "name": "كريمي حاسب",
+      "currency": "old_riyal",
+      "isActive": true
+    },
+    {
+      "accountNumber": "11",
+      "currency": "old_riyal",
+      "id": "bank_1770860211915_do0z8",
+      "isActive": true,
+      "name": "كريمي تطبيقات"
+    },
+    {
+      "id": "bank_1770860211916_rjtd5",
+      "isActive": true,
+      "currency": "old_riyal",
+      "accountNumber": "12",
+      "name": "كريمي فاست / 3056331521"
+    },
+    {
+      "isActive": true,
+      "id": "bank_1770860211917_4w2ph",
+      "accountNumber": "13",
+      "currency": "old_riyal",
+      "name": "كاش"
+    },
+    {
+      "isActive": true,
+      "currency": "old_riyal",
+      "name": "مفتاح اب",
+      "accountNumber": "14",
+      "id": "bank_1770860211918_fi278"
+    },
+    {
+      "accountNumber": "15",
+      "isActive": true,
+      "currency": "old_riyal",
+      "name": "مفتاح صنعاء",
+      "id": "bank_1770860211919_zfpph"
+    },
+    {
+      "accountNumber": "16",
+      "isActive": true,
+      "currency": "old_riyal",
+      "id": "bank_1770860211920_kiifi",
+      "name": "ون كاش"
+    },
+    {
+      "accountNumber": "17",
+      "currency": "old_riyal",
+      "isActive": true,
+      "name": "بيس ريال قديم",
+      "id": "bank_1770860211921_50dwx"
+    },
+    {
+      "currency": "old_riyal",
+      "id": "bank_1770860211922_ffbaa",
+      "name": "جوالي 5753",
+      "accountNumber": "18",
+      "isActive": true
+    },
+    {
+      "accountNumber": "19",
+      "isActive": true,
+      "id": "bank_1770860211923_br024",
+      "currency": "old_riyal",
+      "name": "محفظة جيب"
+    },
+    {
+      "currency": "old_riyal",
+      "name": "سبأ كاش",
+      "isActive": true,
+      "accountNumber": "20",
+      "id": "bank_1770860211924_f77dq"
+    },
+    {
+      "isActive": true,
+      "id": "bank_1770860211925_qqvcy",
+      "currency": "old_riyal",
+      "accountNumber": "21",
+      "name": "محفظتي 77400.8189"
+    },
+    {
+      "name": "الامتياز للصرافة 232248",
+      "accountNumber": "22",
+      "id": "bank_1770860211926_44195",
+      "isActive": true,
+      "currency": "old_riyal"
+    },
+    {
+      "currency": "old_riyal",
+      "accountNumber": "23",
+      "id": "bank_1770860211927_siro5",
+      "isActive": true,
+      "name": "محفظة موبايل موني"
+    },
+    {
+      "isActive": true,
+      "name": "محفظة شامل موني",
+      "accountNumber": "24",
+      "id": "bank_1770860211928_dagfv",
+      "currency": "old_riyal"
+    },
+    {
+      "currency": "new_riyal",
+      "id": "bank_1770860354613_o4b7h",
+      "accountNumber": "1",
+      "name": "صندوق القطيبي ريال جديد",
+      "isActive": true
+    },
+    {
+      "name": "صندوق العمقي ريال جديد",
+      "currency": "new_riyal",
+      "isActive": true,
+      "id": "bank_1770860354614_hplse",
+      "accountNumber": "2"
+    },
+    {
+      "currency": "new_riyal",
+      "isActive": true,
+      "id": "bank_1770860354615_kdsyo",
+      "name": "كريمي سلمان ريال جديد",
+      "accountNumber": "3"
+    },
+    {
+      "currency": "new_riyal",
+      "accountNumber": "4",
+      "isActive": true,
+      "id": "bank_1770860354616_7870p",
+      "name": "كريمي ش توصيل- 55845855- ريال جديد"
+    },
+    {
+      "name": "كريمي حاسب عدن",
+      "id": "bank_1770860354617_3egfc",
+      "accountNumber": "5",
+      "isActive": true,
+      "currency": "new_riyal"
+    },
+    {
+      "accountNumber": "6",
+      "isActive": true,
+      "currency": "new_riyal",
+      "id": "bank_1770860354618_5hd8i",
+      "name": "مفتاح عدن"
+    },
+    {
+      "name": "محفظتي",
+      "currency": "new_riyal",
+      "isActive": true,
+      "accountNumber": "7",
+      "id": "bank_1770860354619_pugfk"
+    },
+    {
+      "name": "بيس ريال جديد",
+      "accountNumber": "8",
+      "id": "bank_1770860354620_66zi3",
+      "isActive": true,
+      "currency": "new_riyal"
+    },
+    {
+      "name": "بنك الشمول",
+      "currency": "new_riyal",
+      "accountNumber": "9",
+      "isActive": true,
+      "id": "bank_1770860354621_r6q5i"
+    },
+    {
+      "name": "بنك الشمول عبدالحميد ذيبان",
+      "accountNumber": "10",
+      "isActive": true,
+      "id": "bank_1770860354622_xd58q",
+      "currency": "new_riyal"
+    },
+    {
+      "currency": "new_riyal",
+      "isActive": true,
+      "id": "bank_1770860354623_90d60",
+      "name": "فلوسك عدن",
+      "accountNumber": "11"
+    },
+    {
+      "name": "صندوق العمقي دولار",
+      "isActive": true,
+      "currency": "blue_usd",
+      "id": "bank_1770860422499_9ue0p",
+      "accountNumber": "1"
+    },
+    {
+      "currency": "blue_usd",
+      "accountNumber": "2",
+      "id": "bank_1770860422500_keane",
+      "name": "صندوق توصيل- الحزمي للصرافة 114754.61",
+      "isActive": true
+    },
+    {
+      "isActive": true,
+      "currency": "blue_usd",
+      "id": "bank_1770860422501_vkqrg",
+      "accountNumber": "3",
+      "name": "صندوق توصيل- جمعان للصرافة"
+    },
+    {
+      "id": "bank_1770860422502_82b2e",
+      "currency": "blue_usd",
+      "name": "صندوق كريمي ش توصيل 3056118434 دولار",
+      "accountNumber": "4",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860422503_qshna",
+      "accountNumber": "5",
+      "currency": "blue_usd",
+      "isActive": true,
+      "name": "جيب"
+    },
+    {
+      "accountNumber": "6",
+      "isActive": true,
+      "id": "bank_1770860422504_cultr",
+      "currency": "blue_usd",
+      "name": "قطيبي دولار"
+    },
+    {
+      "accountNumber": "7",
+      "name": "مفتاح عدن دولار",
+      "id": "bank_1770860422505_cqs4r",
+      "currency": "blue_usd",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860422506_eqe16",
+      "isActive": true,
+      "accountNumber": "8",
+      "name": "صندوق مفتاح الرئيسي صنعاء دولار",
+      "currency": "blue_usd"
+    },
+    {
+      "id": "bank_1770860620775_o7w38",
+      "name": "الصندوق ريال سعودي",
+      "currency": "sar",
+      "accountNumber": "1",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860620776_wl9pc",
+      "name": "صندوق العمقي سعودي",
+      "currency": "sar",
+      "accountNumber": "2",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860620777_bujei",
+      "name": "صندوق توصيل- الحزمي للصرافة 114754.61",
+      "currency": "sar",
+      "accountNumber": "3",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860620778_0rl22",
+      "name": "صندوق كريمي ش التطبيقات 3020736216 سعودي",
+      "currency": "sar",
+      "accountNumber": "4",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860620779_8094t",
+      "name": "فاست سمارت للتوصيل 3166210851",
+      "currency": "sar",
+      "accountNumber": "5",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860620780_ztco1",
+      "name": "صندوق كريمي ش توصيل 3056179029 سعودي",
+      "currency": "sar",
+      "accountNumber": "6",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860620781_pwwor",
+      "name": "صندوق مفتاح الرئيسي صنعاء سعودي",
+      "currency": "sar",
+      "accountNumber": "7",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860620782_d2wh5",
+      "name": "كاش",
+      "currency": "sar",
+      "accountNumber": "8",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860620783_nd5qs",
+      "name": "جوالي تاجر",
+      "currency": "sar",
+      "accountNumber": "9",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860620784_wj18r",
+      "name": "كريمي سلمان ريال سعودي 4204446888",
+      "currency": "sar",
+      "accountNumber": "10",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860620785_2l580",
+      "name": "مفتاح عدن ريال سعودي",
+      "currency": "sar",
+      "accountNumber": "11",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860620786_eoj9h",
+      "name": "قطيبي سعودي",
+      "currency": "sar",
+      "accountNumber": "12",
+      "isActive": true
+    },
+    {
+      "id": "bank_1770860620787_nedt3",
+      "name": "محفظة جيب",
+      "currency": "sar",
+      "accountNumber": "13",
+      "isActive": true
+    }
+  ],
+  "particlesConfig": {
+    "count": 500,
+    "type": "dollar",
+    "speed": 1,
+    "interactionStrength": 1,
+    "enabled": false
+  },
+  "customUsers": [
+    {
+      "name": "عبدالله ذيبان",
+      "email": "abdullah178@financial.com",
+      "isActive": true,
+      "role": "admin",
+      "permissions": [
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import",
+        "funds_view",
+        "funds_add",
+        "funds_edit",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "archives_view",
+        "tips_view",
+        "tips_add",
+        "tips_delete",
+        "logs_view",
+        "users_view",
+        "users_add",
+        "users_edit",
+        "users_delete",
+        "users_permissions",
+        "funds_delete",
+        "settings_manage",
+        "dashboard_view",
+        "loans_view",
+        "loans_approve",
+        "salary_view",
+        "loans_edit"
+      ],
+      "username": "abdullah178@financial.com",
+      "id": "1770998963094-7l4i68nhr"
+    },
+    {
+      "permissions": [
+        "dashboard_view",
+        "archives_view",
+        "funds_view",
+        "funds_add",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage"
+      ],
+      "isActive": true,
+      "username": "bashar33@financial.com",
+      "email": "bashar33@financial.com",
+      "role": "user",
+      "id": "1771078501191-9j5zkedve",
+      "name": "بشار رفعان"
+    },
+    {
+      "id": "1771084718709-4uo2y1wp3",
+      "email": "dhiaa31@financial.com",
+      "permissions": [
+        "dashboard_view",
+        "funds_view",
+        "funds_add",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_import",
+        "archives_view"
+      ],
+      "name": "ضياء الزبيري",
+      "username": "dhiaa31@financial.com",
+      "role": "user",
+      "isActive": true
+    },
+    {
+      "permissions": [
+        "dashboard_view",
+        "archives_view",
+        "funds_view",
+        "funds_add",
+        "funds_edit",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import"
+      ],
+      "email": "najib51@financial.com",
+      "username": "najib51@financial.com",
+      "id": "1771085330663-5avf26k3m",
+      "isActive": true,
+      "role": "user",
+      "name": "نجيب الحٌكيمة"
+    },
+    {
+      "isActive": true,
+      "username": "mh.matar@financial.com",
+      "name": "محمد مطر",
+      "permissions": [
+        "dashboard_view",
+        "archives_view",
+        "funds_view",
+        "funds_add",
+        "funds_edit",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import"
+      ],
+      "id": "1771085682436-9qw4dmiu8",
+      "email": "mh.matar@financial.com",
+      "role": "user"
+    },
+    {
+      "permissions": [
+        "dashboard_view",
+        "archives_view",
+        "funds_view",
+        "funds_add",
+        "funds_edit",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import"
+      ],
+      "role": "user",
+      "username": "mohamed1@financial.com",
+      "email": "mohamed1@financial.com",
+      "isActive": true,
+      "id": "1771087833515-4x9yv7iq2",
+      "name": "محمد عبدالرحمن"
+    },
+    {
+      "name": "محمد ذيبان",
+      "permissions": [
+        "dashboard_view",
+        "archives_view",
+        "logs_view",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import",
+        "funds_view",
+        "funds_add",
+        "funds_edit",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "funds_delete",
+        "tips_view",
+        "tips_add",
+        "tips_delete"
+      ],
+      "role": "user",
+      "id": "1771087945523-458d7ttc5",
+      "username": "mohamed56@financial.com",
+      "isActive": true,
+      "email": "mohamed56@financial.com"
+    },
+    {
+      "name": "علاء ذيبان",
+      "id": "1771088189192-39l3rlp7b",
+      "isActive": true,
+      "username": "alaa@financial.com",
+      "permissions": [
+        "dashboard_view",
+        "archives_view",
+        "users_view",
+        "users_add",
+        "users_edit",
+        "users_delete",
+        "users_permissions",
+        "settings_manage",
+        "funds_delete",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import",
+        "funds_view",
+        "funds_add",
+        "funds_edit",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "logs_view",
+        "tips_view",
+        "tips_add",
+        "tips_delete"
+      ],
+      "role": "user",
+      "email": "alaa@financial.com"
+    }
+  ],
+  "users": [
+    {
+      "id": "0",
+      "username": "abdr200178",
+      "name": "عبدالرحمن الصغير",
+      "role": "super_admin",
+      "isActive": true,
+      "email": "abdr200178@financial.com"
+    },
+    {
+      "name": "عبدالله ذيبان",
+      "email": "abdullah178@financial.com",
+      "isActive": true,
+      "role": "admin",
+      "permissions": [
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import",
+        "funds_view",
+        "funds_add",
+        "funds_edit",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "archives_view",
+        "tips_view",
+        "tips_add",
+        "tips_delete",
+        "logs_view",
+        "users_view",
+        "users_add",
+        "users_edit",
+        "users_delete",
+        "users_permissions",
+        "funds_delete",
+        "settings_manage",
+        "dashboard_view",
+        "loans_view",
+        "loans_approve",
+        "salary_view",
+        "loans_edit"
+      ],
+      "username": "abdullah178@financial.com",
+      "id": "1770998963094-7l4i68nhr"
+    },
+    {
+      "permissions": [
+        "dashboard_view",
+        "archives_view",
+        "funds_view",
+        "funds_add",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage"
+      ],
+      "isActive": true,
+      "username": "bashar33@financial.com",
+      "email": "bashar33@financial.com",
+      "role": "user",
+      "id": "1771078501191-9j5zkedve",
+      "name": "بشار رفعان"
+    },
+    {
+      "id": "1771084718709-4uo2y1wp3",
+      "email": "dhiaa31@financial.com",
+      "permissions": [
+        "dashboard_view",
+        "funds_view",
+        "funds_add",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_import",
+        "archives_view"
+      ],
+      "name": "ضياء الزبيري",
+      "username": "dhiaa31@financial.com",
+      "role": "user",
+      "isActive": true
+    },
+    {
+      "permissions": [
+        "dashboard_view",
+        "archives_view",
+        "funds_view",
+        "funds_add",
+        "funds_edit",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import"
+      ],
+      "email": "najib51@financial.com",
+      "username": "najib51@financial.com",
+      "id": "1771085330663-5avf26k3m",
+      "isActive": true,
+      "role": "user",
+      "name": "نجيب الحٌكيمة"
+    },
+    {
+      "isActive": true,
+      "username": "mh.matar@financial.com",
+      "name": "محمد مطر",
+      "permissions": [
+        "dashboard_view",
+        "archives_view",
+        "funds_view",
+        "funds_add",
+        "funds_edit",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import"
+      ],
+      "id": "1771085682436-9qw4dmiu8",
+      "email": "mh.matar@financial.com",
+      "role": "user"
+    },
+    {
+      "permissions": [
+        "dashboard_view",
+        "archives_view",
+        "funds_view",
+        "funds_add",
+        "funds_edit",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import"
+      ],
+      "role": "user",
+      "username": "mohamed1@financial.com",
+      "email": "mohamed1@financial.com",
+      "isActive": true,
+      "id": "1771087833515-4x9yv7iq2",
+      "name": "محمد عبدالرحمن"
+    },
+    {
+      "name": "محمد ذيبان",
+      "permissions": [
+        "dashboard_view",
+        "archives_view",
+        "logs_view",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import",
+        "funds_view",
+        "funds_add",
+        "funds_edit",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "funds_delete",
+        "tips_view",
+        "tips_add",
+        "tips_delete"
+      ],
+      "role": "user",
+      "id": "1771087945523-458d7ttc5",
+      "username": "mohamed56@financial.com",
+      "isActive": true,
+      "email": "mohamed56@financial.com"
+    },
+    {
+      "name": "علاء ذيبان",
+      "id": "1771088189192-39l3rlp7b",
+      "isActive": true,
+      "username": "alaa@financial.com",
+      "permissions": [
+        "dashboard_view",
+        "archives_view",
+        "users_view",
+        "users_add",
+        "users_edit",
+        "users_delete",
+        "users_permissions",
+        "settings_manage",
+        "funds_delete",
+        "restaurants_view",
+        "restaurants_add",
+        "restaurants_edit",
+        "restaurants_delete",
+        "restaurants_import",
+        "funds_view",
+        "funds_add",
+        "funds_edit",
+        "recon_view",
+        "recon_add",
+        "payments_view",
+        "payments_manage",
+        "logs_view",
+        "tips_view",
+        "tips_add",
+        "tips_delete"
+      ],
+      "role": "user",
+      "email": "alaa@financial.com"
+    }
+  ],
+  "updatedAt": "2026-02-17T07:53:50.459Z",
+  "theme": "light"
+}

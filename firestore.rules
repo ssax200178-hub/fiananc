@@ -1,1 +1,547 @@
-rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if request.auth != null; } } }
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================================
+    // Helper Functions
+    // ============================================================
+
+    // Get the user_roles document for the authenticated user
+    function getUserData(env) {
+      return get(/databases/$(database)/documents/$(env)/v1_data/user_roles/$(request.auth.uid)).data;
+    }
+
+    // Get user role
+    function getUserRole(env) {
+      return getUserData(env).role;
+    }
+
+    // Check if user account is active
+    function isActiveUser(env) {
+      let userData = getUserData(env);
+      return userData != null && userData.isActive == true;
+    }
+
+    // Check if user is super_admin
+    function isSuperAdmin(env) {
+      return getUserRole(env) == 'super_admin';
+    }
+
+    // Check if user is admin or super_admin
+    function isAdminOrAbove(env) {
+      let role = getUserRole(env);
+      return role == 'admin' || role == 'super_admin';
+    }
+
+    // Check if user has a specific permission
+    function hasPermission(env, permission) {
+      let userData = getUserData(env);
+      return userData.role == 'super_admin' || permission in userData.permissions;
+    }
+
+    // Combined check: authenticated + active + has permission
+    function canDo(env, permission) {
+      return request.auth != null && isActiveUser(env) && hasPermission(env, permission);
+    }
+
+    // Combined check: authenticated + active + admin or above
+    function isActiveAdmin(env) {
+      return request.auth != null && isActiveUser(env) && isAdminOrAbove(env);
+    }
+
+    // Combined check: authenticated + active + super_admin
+    function isActiveSuperAdmin(env) {
+      return request.auth != null && isActiveUser(env) && isSuperAdmin(env);
+    }
+
+    // Basic authenticated + active check
+    function isAuthenticated(env) {
+      return request.auth != null && isActiveUser(env);
+    }
+
+    // ============================================================
+    // Production Environment: app/v1_data
+    // ============================================================
+    match /app/v1_data {
+
+      // Main document (contains customUsers, bankDefinitions, settings)
+      // Read: any authenticated active user
+      // Write: admin+ or users with settings_manage/users_permissions
+      allow read: if isAuthenticated('app');
+      allow update: if isActiveAdmin('app')
+                    || canDo('app', 'settings_manage')
+                    || canDo('app', 'users_permissions');
+      allow create, delete: if isActiveSuperAdmin('app');
+
+      // --- user_roles subcollection ---
+      // Only super_admin can write; any authenticated user can read their own
+      match /user_roles/{userId} {
+        allow read: if request.auth != null;
+        allow create, update, delete: if isActiveSuperAdmin('app')
+                              || canDo('app', 'users_permissions');
+      }
+
+      // --- user_presence subcollection ---
+      match /user_presence/{userId} {
+        allow read: if isAuthenticated('app');
+        allow write: if isAuthenticated('app');
+      }
+
+      // --- restaurants ---
+      match /restaurants/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create: if canDo('app', 'restaurants_add');
+        allow update: if canDo('app', 'restaurants_edit');
+        allow delete: if canDo('app', 'restaurants_delete');
+      }
+
+      // --- payment_accounts ---
+      match /payment_accounts/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create: if canDo('app', 'restaurants_add') || canDo('app', 'payments_manage');
+        allow update: if canDo('app', 'restaurants_edit') || canDo('app', 'payments_manage');
+        allow delete: if canDo('app', 'restaurants_delete') || canDo('app', 'payments_manage');
+      }
+
+      // --- employees ---
+      match /employees/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create: if canDo('app', 'users_add');
+        allow update: if canDo('app', 'users_edit');
+        allow delete: if canDo('app', 'users_delete');
+      }
+
+      // --- history_records (reconciliation) ---
+      match /history_records/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create: if canDo('app', 'recon_add');
+        allow update: if canDo('app', 'recon_add') || isActiveAdmin('app');
+        allow delete: if isActiveSuperAdmin('app');
+      }
+
+      // --- fund_snapshots ---
+      match /fund_snapshots/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create: if canDo('app', 'funds_add');
+        allow update: if canDo('app', 'funds_edit');
+        allow delete: if isActiveSuperAdmin('app');
+      }
+
+      // --- fund_draft ---
+      match /fund_draft/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create, update: if canDo('app', 'funds_add')
+                              || canDo('app', 'funds_edit');
+        allow delete: if canDo('app', 'funds_add');
+      }
+
+      // --- financial_tips ---
+      match /financial_tips/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create, update: if canDo('app', 'tips_add');
+        allow delete: if canDo('app', 'tips_delete');
+      }
+
+      // --- activity_logs (append-only) ---
+      match /activity_logs/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create: if request.auth != null; // Any authenticated user can log
+        allow update: if false; // Immutable audit trail
+        allow delete: if isActiveSuperAdmin('app');
+      }
+
+      // --- loan_requests ---
+      match /loan_requests/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create: if canDo('app', 'loans_add');
+        allow update: if canDo('app', 'loans_edit')
+                      || canDo('app', 'loans_approve');
+        allow delete: if canDo('app', 'loans_delete');
+      }
+
+      // --- transfer_requests ---
+      match /transfer_requests/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create, update: if canDo('app', 'payments_manage');
+        allow delete: if canDo('app', 'payments_manage')
+                      || isActiveSuperAdmin('app');
+      }
+
+      // --- liquidity_mappings ---
+      match /liquidity_mappings/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create, update: if canDo('app', 'settings_manage')
+                              || isActiveAdmin('app');
+        allow delete: if isActiveSuperAdmin('app');
+      }
+
+      // --- operational_sheets ---
+      match /operational_sheets/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create, update: if isAuthenticated('app');
+        allow delete: if isActiveAdmin('app');
+      }
+
+      // --- feedback ---
+      match /feedback/{docId} {
+        allow read: if request.auth != null && (request.auth.uid == resource.data.userId || canDo('app', 'developer_access'));
+        allow create: if request.auth != null;
+        allow update, delete: if canDo('app', 'developer_access');
+      }
+
+      // --- settings (developer feedback) ---
+      match /settings/{settingId} {
+        allow read: if isAuthenticated('app');
+        allow write: if canDo('app', 'settings_manage') || isActiveSuperAdmin('app');
+      }
+
+      // --- branches ---
+      match /branches/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create: if canDo('app', 'branches_add');
+        allow update: if canDo('app', 'branches_edit');
+        allow delete: if canDo('app', 'branches_delete');
+      }
+
+      // --- exchange_rates ---
+      match /exchange_rates/{docId} {
+        allow read: if isAuthenticated('app');
+        allow write: if canDo('app', 'exchange_rates_manage');
+      }
+
+      // --- invoice_batches ---
+      match /invoice_batches/{batchId} {
+        allow read: if isAuthenticated('app');
+        allow create: if canDo('app', 'invoice_manage') || canDo('app', 'invoice_batches_create');
+        allow update: if canDo('app', 'invoice_manage') || canDo('app', 'invoice_batches_edit') || canDo('app', 'batch_items_create') || canDo('app', 'batch_items_edit') || canDo('app', 'batch_items_delete');
+        allow delete: if canDo('app', 'invoice_batches_delete') || isActiveSuperAdmin('app');
+
+        // Subcollection: invoices (legacy)
+        match /invoices/{invoiceId} {
+          allow read: if isAuthenticated('app');
+          allow create, update: if canDo('app', 'invoice_manage');
+          allow delete: if canDo('app', 'invoice_manage') || isActiveSuperAdmin('app');
+        }
+      }
+
+      // --- invoice_batch_items ---
+      match /invoice_batch_items/{itemId} {
+        allow read: if isAuthenticated('app');
+        allow create: if canDo('app', 'batch_items_create') || canDo('app', 'invoice_manage');
+        allow update: if canDo('app', 'batch_items_edit') || canDo('app', 'invoice_manage') || canDo('app', 'financial_details_manage');
+        allow delete: if canDo('app', 'batch_items_delete') || isActiveSuperAdmin('app');
+      }
+
+      // --- phone_payments ---
+      match /phone_payments/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create, update: if canDo('app', 'phone_payments_manage');
+        allow delete: if canDo('app', 'phone_payments_manage') || isActiveSuperAdmin('app');
+      }
+
+      // --- phone_providers ---
+      match /phone_providers/{docId} {
+        allow read: if isAuthenticated('app');
+        allow write: if canDo('app', 'phone_providers_manage');
+      }
+
+      // --- branch_phones ---
+      match /branch_phones/{docId} {
+        allow read: if isAuthenticated('app');
+        allow write: if canDo('app', 'phone_payments_manage');
+      }
+
+      // --- deductions ---
+      match /deductions/{docId} {
+        allow read: if canDo('app', 'deductions_view');
+        allow create, update, delete: if canDo('app', 'deductions_manage');
+      }
+
+      // --- system_balances (أرصدة النظام الأساسي) ---
+      match /system_balances/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create, update: if canDo('app', 'settings_manage')
+                              || isActiveAdmin('app');
+        allow delete: if isActiveSuperAdmin('app');
+      }
+
+      // --- sync_metadata (بيانات المزامنة) ---
+      match /sync_metadata/{docId} {
+        allow read: if isAuthenticated('app');
+        allow write: if canDo('app', 'settings_manage')
+                     || isActiveAdmin('app');
+      }
+
+      // --- account_mappings (ربط الحسابات) ---
+      match /account_mappings/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create, update: if canDo('app', 'settings_manage')
+                              || isActiveAdmin('app');
+        allow delete: if canDo('app', 'settings_manage')
+                      || isActiveSuperAdmin('app');
+      }
+
+      // --- chart_of_accounts (دليل الحسابات) ---
+      match /chart_of_accounts/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create, update: if canDo('app', 'chart_of_accounts_manage')
+                              || canDo('app', 'journal_entries_manage')
+                              || isActiveAdmin('app');
+        allow delete: if canDo('app', 'chart_of_accounts_manage')
+                      || isActiveSuperAdmin('app');
+      }
+
+      // --- journal_entries (القيود المحاسبية) ---
+      match /journal_entries/{docId} {
+        allow read: if isAuthenticated('app');
+        allow create, update: if canDo('app', 'journal_entries_manage')
+                              || isActiveAdmin('app');
+        allow delete: if canDo('app', 'journal_entries_manage')
+                      || isActiveSuperAdmin('app');
+      }
+    }
+
+    // ============================================================
+    // Staging Environment: app_staging/v1_data
+    // (Same rules as production, using 'app_staging' for lookups)
+    // ============================================================
+    match /app_staging/v1_data {
+
+      allow read: if isAuthenticated('app_staging');
+      allow update: if isActiveAdmin('app_staging')
+                    || canDo('app_staging', 'settings_manage')
+                    || canDo('app_staging', 'users_permissions');
+      allow create, delete: if isActiveSuperAdmin('app_staging');
+
+      match /user_roles/{userId} {
+        allow read: if request.auth != null;
+        allow create, update, delete: if isActiveSuperAdmin('app_staging')
+                              || canDo('app_staging', 'users_permissions');
+      }
+
+      match /user_presence/{userId} {
+        allow read: if isAuthenticated('app_staging');
+        allow write: if isAuthenticated('app_staging');
+      }
+
+      match /restaurants/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create: if canDo('app_staging', 'restaurants_add');
+        allow update: if canDo('app_staging', 'restaurants_edit');
+        allow delete: if canDo('app_staging', 'restaurants_delete');
+      }
+
+      // --- payment_accounts ---
+      match /payment_accounts/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create: if canDo('app_staging', 'restaurants_add') || canDo('app_staging', 'payments_manage');
+        allow update: if canDo('app_staging', 'restaurants_edit') || canDo('app_staging', 'payments_manage');
+        allow delete: if canDo('app_staging', 'restaurants_delete') || canDo('app_staging', 'payments_manage');
+      }
+
+      match /employees/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create: if canDo('app_staging', 'users_add');
+        allow update: if canDo('app_staging', 'users_edit');
+        allow delete: if canDo('app_staging', 'users_delete');
+      }
+
+      match /history_records/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create: if canDo('app_staging', 'recon_add');
+        allow update: if canDo('app_staging', 'recon_add') || isActiveAdmin('app_staging');
+        allow delete: if isActiveSuperAdmin('app_staging');
+      }
+
+      match /fund_snapshots/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create: if canDo('app_staging', 'funds_add');
+        allow update: if canDo('app_staging', 'funds_edit');
+        allow delete: if isActiveSuperAdmin('app_staging');
+      }
+
+      match /fund_draft/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create, update: if canDo('app_staging', 'funds_add')
+                              || canDo('app_staging', 'funds_edit');
+        allow delete: if canDo('app_staging', 'funds_add');
+      }
+
+      match /financial_tips/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create, update: if canDo('app_staging', 'tips_add');
+        allow delete: if canDo('app_staging', 'tips_delete');
+      }
+
+      match /activity_logs/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create: if request.auth != null;
+        allow update: if false;
+        allow delete: if isActiveSuperAdmin('app_staging');
+      }
+
+      match /loan_requests/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create: if canDo('app_staging', 'loans_add');
+        allow update: if canDo('app_staging', 'loans_edit')
+                      || canDo('app_staging', 'loans_approve');
+        allow delete: if canDo('app_staging', 'loans_delete');
+      }
+
+      match /transfer_requests/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create, update: if canDo('app_staging', 'payments_manage');
+        allow delete: if canDo('app_staging', 'payments_manage')
+                      || isActiveSuperAdmin('app_staging');
+      }
+
+      match /liquidity_mappings/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create, update: if canDo('app_staging', 'settings_manage')
+                              || isActiveAdmin('app_staging');
+        allow delete: if isActiveSuperAdmin('app_staging');
+      }
+
+      match /operational_sheets/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create, update: if isAuthenticated('app_staging');
+        allow delete: if isActiveAdmin('app_staging');
+      }
+
+      // --- feedback ---
+      match /feedback/{docId} {
+        allow read: if request.auth != null && (request.auth.uid == resource.data.userId || canDo('app_staging', 'developer_access'));
+        allow create: if request.auth != null;
+        allow update, delete: if canDo('app_staging', 'developer_access');
+      }
+
+      // --- settings (developer feedback) ---
+      match /settings/{settingId} {
+        allow read: if isAuthenticated('app_staging');
+        allow write: if canDo('app_staging', 'settings_manage') || isActiveSuperAdmin('app_staging');
+      }
+
+      // --- branches ---
+      match /branches/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create: if canDo('app_staging', 'branches_add');
+        allow update: if canDo('app_staging', 'branches_edit');
+        allow delete: if canDo('app_staging', 'branches_delete');
+      }
+
+      // --- exchange_rates ---
+      match /exchange_rates/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow write: if canDo('app_staging', 'exchange_rates_manage');
+      }
+
+      match /exchange_rate_history/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow write: if canDo('app_staging', 'exchange_rates_manage');
+      }
+
+      // --- invoice_batches ---
+      match /invoice_batches/{batchId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create: if canDo('app_staging', 'invoice_manage') || canDo('app_staging', 'invoice_batches_create');
+        allow update: if canDo('app_staging', 'invoice_manage') || canDo('app_staging', 'invoice_batches_edit');
+        allow delete: if canDo('app_staging', 'invoice_batches_delete') || isActiveSuperAdmin('app_staging');
+
+        // Subcollection: invoices (legacy)
+        match /invoices/{invoiceId} {
+          allow read: if isAuthenticated('app_staging');
+          allow create, update: if canDo('app_staging', 'invoice_manage');
+          allow delete: if canDo('app_staging', 'invoice_manage') || isActiveSuperAdmin('app_staging');
+        }
+      }
+
+      // --- invoice_batch_items ---
+      match /invoice_batch_items/{itemId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create: if canDo('app_staging', 'batch_items_create') || canDo('app_staging', 'invoice_manage');
+        allow update: if canDo('app_staging', 'batch_items_edit') || canDo('app_staging', 'invoice_manage') || canDo('app_staging', 'financial_details_manage');
+        allow delete: if canDo('app_staging', 'batch_items_delete') || isActiveSuperAdmin('app_staging');
+      }
+
+      // --- phone_payments ---
+      match /phone_payments/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create, update: if canDo('app_staging', 'phone_payments_manage');
+        allow delete: if canDo('app_staging', 'phone_payments_manage') || isActiveSuperAdmin('app_staging');
+      }
+
+      // --- phone_providers ---
+      match /phone_providers/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow write: if canDo('app_staging', 'phone_providers_manage');
+      }
+
+      // --- branch_phones ---
+      match /branch_phones/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow write: if canDo('app_staging', 'phone_payments_manage');
+      }
+
+      // --- deductions ---
+      match /deductions/{docId} {
+        allow read: if canDo('app_staging', 'deductions_view');
+        allow create, update, delete: if canDo('app_staging', 'deductions_manage');
+      }
+
+      // --- system_balances (أرصدة النظام الأساسي) ---
+      match /system_balances/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create, update: if canDo('app_staging', 'settings_manage')
+                              || isActiveAdmin('app_staging');
+        allow delete: if isActiveSuperAdmin('app_staging');
+      }
+
+      // --- sync_metadata (بيانات المزامنة) ---
+      match /sync_metadata/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow write: if canDo('app_staging', 'settings_manage')
+                     || isActiveAdmin('app_staging');
+      }
+
+      // --- account_mappings (ربط الحسابات) ---
+      match /account_mappings/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create, update: if canDo('app_staging', 'settings_manage')
+                              || isActiveAdmin('app_staging');
+        allow delete: if canDo('app_staging', 'settings_manage')
+                      || isActiveSuperAdmin('app_staging');
+      }
+
+      // --- chart_of_accounts (دليل الحسابات) ---
+      match /chart_of_accounts/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create, update: if canDo('app_staging', 'chart_of_accounts_manage')
+                              || canDo('app_staging', 'journal_entries_manage')
+                              || isActiveAdmin('app_staging');
+        allow delete: if canDo('app_staging', 'chart_of_accounts_manage')
+                      || isActiveSuperAdmin('app_staging');
+      }
+
+      // --- journal_entries (القيود المحاسبية) ---
+      match /journal_entries/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow create, update: if canDo('app_staging', 'journal_entries_manage')
+                              || isActiveAdmin('app_staging');
+        allow delete: if canDo('app_staging', 'journal_entries_manage')
+                      || isActiveSuperAdmin('app_staging');
+      }
+    }
+
+    // ============================================================
+    // Archives (top-level collection) — immutable audit records
+    // ============================================================
+    match /archives/{docId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && (
+        get(/databases/$(database)/documents/app/v1_data/user_roles/$(request.auth.uid)).data.role in ['super_admin', 'admin']
+      );
+      allow update, delete: if false; // Archives are immutable
+    }
+  }
+}

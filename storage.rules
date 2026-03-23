@@ -1,0 +1,14 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Feedback file uploads
+    match /feedback/{userId}/{allPaths=**} {
+      // Anyone authenticated can read (so admins can see them)
+      allow read: if request.auth != null;
+      // Users can only upload to their own folder + check settings for allowed uploads
+      allow write: if request.auth != null && request.auth.uid == userId
+        && request.resource.size < 5 * 1024 * 1024; // Max 5MB per file
+    }
+  }
+}

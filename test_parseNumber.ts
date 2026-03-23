@@ -8,10 +8,13 @@ const testCases = [
     { input: "1,234.56", expected: 1234.56 },
     { input: "1.234,56", expected: 1234.56 }, // European format
     { input: " 123 ", expected: 123 },
+    { input: "٢٤٧٥", expected: 2475 },
+    { input: "٢,٤٧٥", expected: 2475 },
+    { input: "١,٢٣٤.٥٦", expected: 1234.56 },
     { input: null, expected: 0 },
     { input: undefined, expected: 0 },
     { input: "", expected: 0 },
-    { input: "abc", expected: NaN }, // Should probably be NaN or 0? Current imp returns NaN for completely invalid
+    { input: "abc", expected: NaN },
 ];
 
 console.log("Running parseNumber tests...");

@@ -38,11 +38,11 @@ const LoginPage: React.FC = () => {
 
                 <div className="text-center mb-10">
                     <div className="size-28 bg-white rounded-[2rem] p-4 shadow-2xl flex items-center justify-center mx-auto mb-6 border border-slate-100 dark:border-slate-800 transform hover:scale-105 transition-transform">
-                        <img src="/logo.png" alt="توصيل ون" className="w-full h-full object-contain" />
+                        <img src="/logo.png" alt="الادارة المالية" className="w-full h-full object-contain" />
                     </div>
                     <h1 className="text-3xl font-black text-slate-900 dark:text-white mb-2">تسجيل الدخول</h1>
                     <div className="inline-block px-4 py-1.5 bg-red-50 dark:bg-red-900/10 rounded-full">
-                        <p className="text-[#ED1C24] font-black text-xs">الادارة المالية - شركة توصيل ون</p>
+                        <p className="text-[#ED1C24] font-black text-xs">الادارة المالية</p>
                     </div>
                 </div>
 

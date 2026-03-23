@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import type { Restaurant } from '../AppContext';
-import { parseNumber } from '../utils';
+import { parseNumber, safeCompare, safeSessionGet, safeSessionSet, cleanPayload } from '../utils';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { db } from '../firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { generateBranchPDFBlob, generateAndDownloadArchiveZip } from '../utils/exportUtils';
+import { generateBranchPDFBlob, generateAndDownloadArchiveZip, generateGroupedPDF } from '../utils/exportUtils';
+import { confirmDialog } from '../utils/confirm';
 
 const ARABIC_MONTHS = [
     'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
@@ -48,41 +49,34 @@ function getDefaultPaymentDate(): string {
 }
 
 const RestaurantPaymentsPage: React.FC = () => {
-    const { restaurants, updateRestaurant, currentUser } = useAppContext();
+    const { restaurants, updateRestaurant, currentUser, systemBalances, syncMetadata } = useAppContext();
 
-    const [searchTerm, setSearchTerm] = useState('');
-    const [selectedBranch, setSelectedBranch] = useState('الكل');
-    const [selectedPaymentPeriod, setSelectedPaymentPeriod] = useState('الكل');
-    const [sortBy, setSortBy] = useState<'name' | 'branch' | 'balance' | 'accountType'>('branch');
+    const [searchTerm, setSearchTerm] = useState(safeSessionGet('payments_searchTerm', ''));
+    const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
+    const [selectedBranch, setSelectedBranch] = useState(safeSessionGet('payments_selectedBranch', 'الكل'));
+    const [selectedPaymentPeriod, setSelectedPaymentPeriod] = useState(safeSessionGet('payments_selectedPaymentPeriod', 'الكل'));
+    const [sortBy, setSortBy] = useState<'name' | 'branch' | 'balance' | 'accountType'>(safeSessionGet('payments_sortBy', 'branch'));
     const [isMatchingModalOpen, setIsMatchingModalOpen] = useState(false);
     const [matchingText, setMatchingText] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [isArchiving, setIsArchiving] = useState(false);
+    const [minBalance, setMinBalance] = useState<string>('');
+    const [showInactive, setShowInactive] = useState(false);
     const [autoExtractedData, setAutoExtractedData] = useState<string | null>(null);
     const [selectedPaymentDate, setSelectedPaymentDate] = useState(getDefaultPaymentDate);
     const paymentDateOptions = useMemo(() => getPaymentDateOptions(), []);
     const paymentDateLabel = paymentDateOptions.find(o => o.value === selectedPaymentDate)?.label || selectedPaymentDate.replace('_', ' ');
 
-    // Pagination
     const [itemsPerPage, setItemsPerPage] = useState<number>(50);
     const [branchPages, setBranchPages] = useState<Record<string, number>>({});
-    const [isExportingAll, setIsExportingAll] = useState(false);
-    const [exportMenuOpen, setExportMenuOpen] = useState(false);
-    const [exportMenuStep, setExportMenuStep] = useState<'format' | 'scope'>('format');
-    const [exportFormat, setExportFormat] = useState<'excel' | 'pdf'>('excel');
-    const exportMenuRef = useRef<HTMLDivElement>(null);
 
-    // Close export menu on outside click
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
-                setExportMenuOpen(false);
-                setExportMenuStep('format');
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+    // Export Modal State
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [isExportingAll, setIsExportingAll] = useState(false);
+    const [exportFormat, setExportFormat] = useState<'excel' | 'pdf'>('excel');
+    const [isSpecificExport, setIsSpecificExport] = useState(false);
+    const [exportSortBy, setExportSortBy] = useState<'branch' | 'type'>('branch');
+    const [selectedExportBranches, setSelectedExportBranches] = useState<string[]>([]);
 
     const getBranchPage = useCallback((branch: string) => branchPages[branch] || 1, [branchPages]);
     const setBranchPage = useCallback((branch: string, page: number) => {
@@ -94,7 +88,12 @@ const RestaurantPaymentsPage: React.FC = () => {
         setBranchPages({});
     }, []);
 
-
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedSearch(searchTerm);
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [searchTerm]);
 
     // Integrated Listener for Bookmarklet
     React.useEffect(() => {
@@ -115,34 +114,42 @@ const RestaurantPaymentsPage: React.FC = () => {
     const sortedAndFilteredRestaurants = useMemo(() => {
         return restaurants
             .filter(r => {
-                const name = r.name || '';
-                const accNum = r.restaurantAccountNumber || '';
-                const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    accNum.includes(searchTerm);
+                const s = debouncedSearch.toLowerCase();
+                const matchesSearch = s === '' || [
+                    r.name,
+                    r.restaurantAccountNumber,
+                    r.branch,
+                    r.phone,
+                    r.ownerName,
+                    ...(r.transferAccounts || []).map(a => `${a.type} ${a.beneficiaryName} ${a.accountNumber}`)
+                ].some(val => val && val.toString().toLowerCase().includes(s));
+
                 const matchesBranch = selectedBranch === 'الكل' || r.branch === selectedBranch;
                 const matchesPeriod = selectedPaymentPeriod === 'الكل' || r.paymentPeriod === selectedPaymentPeriod;
-                return matchesSearch && matchesBranch && matchesPeriod;
+                const matchesBalance = minBalance === '' || (r.balance || 0) >= parseFloat(minBalance);
+                const matchesActive = showInactive || r.isActive !== false;
+
+                return matchesSearch && matchesBranch && matchesPeriod && matchesBalance && matchesActive;
             })
             .sort((a, b) => {
                 if (sortBy === 'branch') {
-                    const branchAlpha = (a.branch || '').localeCompare(b.branch || '', 'ar');
+                    const branchAlpha = safeCompare(a.branch, b.branch);
                     if (branchAlpha !== 0) return branchAlpha;
-                    // Then by currency
-                    const currencyCompare = (a.currencyType || '').localeCompare(b.currencyType || '');
+                    const currencyCompare = safeCompare(a.currencyType, b.currencyType);
                     if (currencyCompare !== 0) return currencyCompare;
-                    return (a.name || '').localeCompare(b.name || '', 'ar');
+                    return safeCompare(a.name, b.name);
                 }
                 if (sortBy === 'accountType') {
                     const typeA = (a.transferAccounts?.find(acc => acc.isPrimary)?.type || a.transferAccounts?.[0]?.type || '').toString();
                     const typeB = (b.transferAccounts?.find(acc => acc.isPrimary)?.type || b.transferAccounts?.[0]?.type || '').toString();
-                    const typeCompare = typeA.localeCompare(typeB, 'ar');
+                    const typeCompare = safeCompare(typeA, typeB);
                     if (typeCompare !== 0) return typeCompare;
-                    return (a.name || '').localeCompare(b.name || '', 'ar');
+                    return safeCompare(a.name, b.name);
                 }
                 if (sortBy === 'balance') return (b.balance || 0) - (a.balance || 0);
-                return (a.name || '').localeCompare(b.name || '', 'ar');
+                return safeCompare(a.name, b.name);
             });
-    }, [restaurants, searchTerm, selectedBranch, selectedPaymentPeriod, sortBy]);
+    }, [restaurants, debouncedSearch, selectedBranch, selectedPaymentPeriod, sortBy, minBalance, showInactive]);
 
     const groupedByBranch = useMemo(() => {
         const groups: Record<string, Restaurant[]> = {};
@@ -214,6 +221,7 @@ const RestaurantPaymentsPage: React.FC = () => {
         const data = list.map(r => {
             const primaryAcc = r.transferAccounts?.find(a => a.isPrimary) || r.transferAccounts?.[0];
             return {
+                'الفرع': r.branch || '',
                 'المطعم': r.name || '',
                 'رقم الحساب': r.restaurantAccountNumber || '',
                 'العملة': r.currencyType === 'new_riyal' ? 'ريال جديد' : 'ريال قديم',
@@ -228,7 +236,7 @@ const RestaurantPaymentsPage: React.FC = () => {
         const ws = XLSX.utils.json_to_sheet(data);
         // Set column widths
         ws['!cols'] = [
-            { wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 15 },
+            { wch: 20 }, { wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 15 },
             { wch: 25 }, { wch: 25 }, { wch: 15 }, { wch: 12 }
         ];
         const wb = XLSX.utils.book_new();
@@ -319,7 +327,7 @@ const RestaurantPaymentsPage: React.FC = () => {
             return;
         }
 
-        if (!confirm(`هل أنت متأكد من أرشفة وتصدير جميع كشوفات السداد للفترة "${paymentDateLabel}"؟\nسيتم حفظ لقطة من البيانات وتنزيل ملف ZIP.`)) {
+        if (!await confirmDialog(`هل أنت متأكد من أرشفة وتصدير جميع كشوفات السداد للفترة "${paymentDateLabel}"؟\nسيتم حفظ لقطة من البيانات وتنزيل ملف ZIP.`, { type: 'warning', confirmText: 'أرشفة وتصدير', cancelText: 'إلغاء' })) {
             return;
         }
 
@@ -329,18 +337,35 @@ const RestaurantPaymentsPage: React.FC = () => {
             const archiveId = `${selectedPaymentDate}_${new Date().getFullYear()}`;
             const archiveRef = doc(db, 'archives', archiveId);
 
+            const restaurantsToArchive = restaurants.filter(r => {
+                const matchesBalance = minBalance === '' || (r.balance || 0) >= parseFloat(minBalance);
+                const matchesActive = showInactive || r.isActive !== false;
+                return matchesBalance && matchesActive;
+            });
+
+            const totalNewRiyal = restaurantsToArchive.reduce((sum, r) => sum + (r.currencyType === 'new_riyal' ? (r.balance || 0) : 0), 0);
+            const totalOldRiyal = restaurantsToArchive.reduce((sum, r) => sum + (r.currencyType === 'old_riyal' ? (r.balance || 0) : 0), 0);
+
+            const snapshotBalances = restaurantsToArchive.reduce((acc, r) => {
+                acc[r.id] = r.balance || 0;
+                return acc;
+            }, {} as Record<string, number>);
+
             const snapshotData = {
                 id: archiveId,
                 paymentDateLabel,
                 paymentDateValue: selectedPaymentDate,
                 archivedAt: serverTimestamp(),
-                totalAmount: restaurants.reduce((sum, r) => sum + (r.balance || 0), 0),
-                restaurantCount: restaurants.length,
+                totalAmount: restaurantsToArchive.reduce((sum, r) => sum + (r.balance || 0), 0),
+                totalNewRiyal,
+                totalOldRiyal,
+                snapshotBalances,
+                restaurantCount: restaurantsToArchive.length,
                 branches: branches.filter(b => b !== 'الكل'),
-                restaurants: restaurants
+                restaurants: restaurantsToArchive
             };
 
-            await setDoc(archiveRef, snapshotData);
+            await setDoc(archiveRef, cleanPayload(snapshotData));
 
             // 2. Generate ZIP — uses ALL restaurants
             const zip = new JSZip();
@@ -386,53 +411,64 @@ const RestaurantPaymentsPage: React.FC = () => {
     };
 
     // ======== EXPORT ALL FUNCTIONS ========
-    const exportAllHandler = async (format: 'excel' | 'pdf', scope: 'per-branch' | 'single') => {
-        setExportMenuOpen(false);
-        setExportMenuStep('format');
+    const exportAllHandler = async () => {
+        setIsExportModalOpen(false);
         setIsExportingAll(true);
         try {
-            // Group ALL restaurants by branch
-            const groups: { [key: string]: Restaurant[] } = {};
-            restaurants.forEach(r => {
-                if (!r.branch) return;
-                if (!groups[r.branch]) groups[r.branch] = [];
-                groups[r.branch].push(r);
+            // 1. Filter
+            const filtered = restaurants.filter(r => {
+                const targetBranches = isSpecificExport ? selectedExportBranches : branches.filter(b => b !== 'الكل');
+                if (minBalance !== '' && (r.balance || 0) < parseFloat(minBalance)) return false;
+                if (!showInactive && r.isActive === false) return false;
+                if (targetBranches.length > 0 && !targetBranches.includes(r.branch)) return false;
+                return true;
             });
 
-            if (format === 'excel' && scope === 'single') {
-                // Single Excel file — all restaurants in ONE sheet with branch column
-                const wb = XLSX.utils.book_new();
-                const rows = restaurants.map(r => {
-                    const primaryAcc = r.transferAccounts?.find(a => a.isPrimary) || r.transferAccounts?.[0];
-                    return {
-                        'الفرع': r.branch || '',
-                        'اسم المطعم': r.name || '',
-                        'رقم الحساب': r.restaurantAccountNumber || '',
-                        'العملة': r.currencyType === 'new_riyal' ? 'ريال جديد' : 'ريال قديم',
-                        'الرصيد': r.balance || 0,
-                        'اسم المستفيد': primaryAcc?.beneficiaryName || '-',
-                        'رقم حساب التحويل': primaryAcc?.accountNumber || '-',
-                        'نوع الحساب': primaryAcc?.type || '-',
-                        'فترة السداد': r.paymentPeriod === 'semi-monthly' ? 'نصف شهرية' : 'شهرية'
-                    };
-                });
-                const ws = XLSX.utils.json_to_sheet(rows);
-                ws['!cols'] = [
-                    { wch: 20 }, { wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 15 },
-                    { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 12 }
-                ];
-                XLSX.utils.book_append_sheet(wb, ws, 'جميع المطاعم');
-                XLSX.writeFile(wb, `كشف_سداد_جميع_الفروع_${paymentDateLabel.replace(/\s/g, '_')}.xlsx`);
+            if (filtered.length === 0) {
+                alert('لا توجد بيانات للتصدير للفروع المحددة');
+                return;
+            }
 
-            } else if (format === 'excel' && scope === 'per-branch') {
-                // Per-branch: each branch as separate Excel file in a ZIP
+            // 2. Sort & Group
+            const groups: { name: string; restaurants: Restaurant[]; total: number }[] = [];
+            const groupMap: Record<string, Restaurant[]> = {};
+
+            filtered.forEach(r => {
+                let key = '';
+                if (exportSortBy === 'branch') {
+                    key = r.branch || 'غير محدد';
+                } else {
+                    // Sort by Payment Type (Primary Account Type)
+                    const primary = r.transferAccounts?.find(a => a.isPrimary) || r.transferAccounts?.[0];
+                    key = primary?.type || 'غير محدد';
+                }
+                if (!groupMap[key]) groupMap[key] = [];
+                groupMap[key].push(r);
+            });
+
+            // Sort Groups
+            const sortedKeys = Object.keys(groupMap).sort((a, b) => safeCompare(a, b));
+            sortedKeys.forEach(key => {
+                const list = groupMap[key];
+                // Sort inside group by name
+                list.sort((a, b) => safeCompare(a.name, b.name));
+                const total = list.reduce((sum, r) => sum + (r.balance || 0), 0);
+                groups.push({ name: key, restaurants: list, total });
+            });
+
+            const grandTotal = groups.reduce((sum, g) => sum + g.total, 0);
+
+            if (exportFormat === 'excel') {
+                // Per-Group (Branch/Type) as Zip
                 const zip = new JSZip();
-                Object.entries(groups).forEach(([branchName, branchRestaurants]) => {
+                groups.forEach(g => {
                     const wb = XLSX.utils.book_new();
-                    const rows = branchRestaurants.map(r => {
+                    // Flatten simple list for per-file
+                    const data = g.restaurants.map(r => {
                         const primaryAcc = r.transferAccounts?.find(a => a.isPrimary) || r.transferAccounts?.[0];
                         return {
-                            'اسم المطعم': r.name || '',
+                            'الفرع': r.branch || '',
+                            'المطعم': r.name || '',
                             'رقم الحساب': r.restaurantAccountNumber || '',
                             'العملة': r.currencyType === 'new_riyal' ? 'ريال جديد' : 'ريال قديم',
                             'الرصيد': r.balance || 0,
@@ -442,51 +478,46 @@ const RestaurantPaymentsPage: React.FC = () => {
                             'فترة السداد': r.paymentPeriod === 'semi-monthly' ? 'نصف شهرية' : 'شهرية'
                         };
                     });
-                    const ws = XLSX.utils.json_to_sheet(rows);
-                    ws['!cols'] = [
-                        { wch: 25 }, { wch: 15 }, { wch: 12 }, { wch: 15 },
-                        { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 12 }
-                    ];
-                    XLSX.utils.book_append_sheet(wb, ws, branchName.slice(0, 31));
+                    // Append Total Row object
+                    data.push({
+                        'الفرع': '', 'المطعم': '', 'رقم الحساب': '', 'العملة': 'الإجمالي',
+                        'الرصيد': g.total,
+                        'اسم المستفيد': '', 'رقم حساب التحويل': '', 'نوع الحساب': '', 'فترة السداد': ''
+                    } as any);
+
+                    const ws = XLSX.utils.json_to_sheet(data);
+                    XLSX.utils.book_append_sheet(wb, ws, g.name.substring(0, 31));
                     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-                    zip.file(`${branchName}_${paymentDateLabel}.xlsx`, wbout);
+                    zip.file(`${g.name}_${paymentDateLabel}.xlsx`, wbout);
                 });
+
                 const content = await zip.generateAsync({ type: 'blob' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(content);
-                link.download = `كشوفات_اكسل_${paymentDateLabel.replace(/\s/g, '_')}.zip`;
+                link.download = `كشوفات_اكسل_مجمعة_${paymentDateLabel}.zip`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
 
-            } else if (format === 'pdf' && scope === 'per-branch') {
-                // Per-branch: each branch as separate PDF in a ZIP
+            } else {
+                // PDF Export
+                // Per Group Zip PDF
                 const zip = new JSZip();
-                const promises = Object.entries(groups).map(async ([branchName, branchRestaurants]) => {
-                    const blob = await generateBranchPDFBlob(branchName, branchRestaurants, paymentDateLabel);
-                    if (blob) zip.file(`${branchName}_${paymentDateLabel}.pdf`, blob);
+                const promises = groups.map(async (g) => {
+                    const blob = await generateBranchPDFBlob(g.name, g.restaurants, paymentDateLabel, true);
+                    if (blob) zip.file(`${g.name}_${paymentDateLabel}.pdf`, blob);
                 });
+
                 await Promise.all(promises);
                 const content = await zip.generateAsync({ type: 'blob' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(content);
-                link.download = `كشوفات_PDF_${paymentDateLabel.replace(/\s/g, '_')}.zip`;
+                link.download = `كشوفات_PDF_مجمعة_${paymentDateLabel}.zip`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-
-            } else if (format === 'pdf' && scope === 'single') {
-                // Single PDF — all restaurants with branch column
-                const blob = await generateBranchPDFBlob('جميع الفروع', restaurants, paymentDateLabel, true);
-                if (blob) {
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = `كشف_سداد_جميع_الفروع_${paymentDateLabel.replace(/\s/g, '_')}.pdf`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                }
             }
+
         } catch (error) {
             console.error('Export Error:', error);
             alert('حدث خطأ أثناء التصدير: ' + (error instanceof Error ? error.message : String(error)));
@@ -520,9 +551,12 @@ const RestaurantPaymentsPage: React.FC = () => {
                         {isArchiving ? 'جاري الأرشفة...' : 'أرشفة وتصدير الكل'}
                     </button>
 
-                    <div className="relative" ref={exportMenuRef}>
+                    <div>
                         <button
-                            onClick={() => { setExportMenuOpen(!exportMenuOpen); setExportMenuStep('format'); }}
+                            onClick={() => {
+                                setSelectedExportBranches(branches.filter(b => b !== 'الكل'));
+                                setIsExportModalOpen(true);
+                            }}
                             disabled={isExportingAll}
                             className={`px-6 py-3 ${isExportingAll ? 'bg-slate-400' : 'bg-emerald-600 hover:bg-emerald-700'} text-white font-black rounded-xl shadow-lg transition-all flex items-center gap-2`}
                         >
@@ -531,64 +565,16 @@ const RestaurantPaymentsPage: React.FC = () => {
                             ) : (
                                 <span className="material-symbols-outlined">download</span>
                             )}
-                            {isExportingAll ? 'جاري التصدير...' : 'تصدير الكل'}
-                            {!isExportingAll && <span className="material-symbols-outlined text-sm">expand_more</span>}
+                            {isExportingAll ? 'جاري التصدير...' : 'تصدير مخصص'}
                         </button>
-
-                        {exportMenuOpen && (
-                            <div className="absolute top-full mt-2 left-0 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 z-50 min-w-[220px] overflow-hidden animate-fade-in">
-                                {exportMenuStep === 'format' ? (
-                                    <>
-                                        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-600">
-                                            <p className="text-xs font-black text-slate-500 dark:text-slate-400">اختر صيغة التصدير</p>
-                                        </div>
-                                        <button
-                                            onClick={() => { setExportFormat('excel'); setExportMenuStep('scope'); }}
-                                            className="w-full px-4 py-3 text-right hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors flex items-center gap-3 font-bold text-sm"
-                                        >
-                                            <span className="material-symbols-outlined text-emerald-600">table_chart</span>
-                                            تصدير Excel
-                                        </button>
-                                        <button
-                                            onClick={() => { setExportFormat('pdf'); setExportMenuStep('scope'); }}
-                                            className="w-full px-4 py-3 text-right hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center gap-3 font-bold text-sm"
-                                        >
-                                            <span className="material-symbols-outlined text-blue-600">picture_as_pdf</span>
-                                            تصدير PDF
-                                        </button>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div className="px-4 py-3 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-600 flex items-center gap-2">
-                                            <button onClick={() => setExportMenuStep('format')} className="material-symbols-outlined text-sm text-slate-400 hover:text-slate-600">arrow_forward</button>
-                                            <p className="text-xs font-black text-slate-500 dark:text-slate-400">اختر طريقة التصدير</p>
-                                        </div>
-                                        <button
-                                            onClick={() => exportAllHandler(exportFormat, 'per-branch')}
-                                            className="w-full px-4 py-3 text-right hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex items-center gap-3 font-bold text-sm"
-                                        >
-                                            <span className="material-symbols-outlined text-orange-500">folder_zip</span>
-                                            كل فرع كملف منفصل
-                                        </button>
-                                        <button
-                                            onClick={() => exportAllHandler(exportFormat, 'single')}
-                                            className="w-full px-4 py-3 text-right hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex items-center gap-3 font-bold text-sm"
-                                        >
-                                            <span className="material-symbols-outlined text-indigo-500">description</span>
-                                            الكل في ملف واحد
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-                        )}
                     </div>
 
                     <button
                         onClick={() => setIsMatchingModalOpen(true)}
-                        className="px-6 py-3 bg-[var(--color-header)] text-white font-black rounded-xl shadow-lg hover:scale-105 transition-all flex items-center gap-2"
+                        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-lg hover:scale-105 transition-all flex items-center gap-2"
                     >
-                        <span className="material-symbols-outlined">analytics</span>
-                        مطابقة واستخراج البيانات
+                        <span className="material-symbols-outlined">upload_file</span>
+                        استيراد الأرصدة
                     </button>
                 </div>
             </div>
@@ -602,14 +588,39 @@ const RestaurantPaymentsPage: React.FC = () => {
                         placeholder="بحث بالاسم أو ID..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pr-10 pl-4 py-3 bg-slate-50 dark:bg-slate-700/50 border-none rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-header)] transition-all font-bold text-sm"
+                        className="w-full p-4 pr-10 bg-slate-50 dark:bg-slate-700/50 border-2 border-slate-100 dark:border-slate-700/50 rounded-2xl outline-none focus:border-[var(--color-header)] font-bold transition-all"
                     />
                 </div>
+
+                <div className="relative">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-sm">payments</span>
+                    <input
+                        type="number"
+                        placeholder="الحد الأدنى للرصيد"
+                        value={minBalance}
+                        onChange={(e) => setMinBalance(e.target.value)}
+                        className="w-full p-4 pr-10 bg-slate-50 dark:bg-slate-700/50 border-2 border-slate-100 dark:border-slate-700/50 rounded-2xl outline-none focus:border-[var(--color-header)] font-bold transition-all"
+                    />
+                </div>
+
+                <div className="relative flex items-center justify-between px-4 bg-slate-50 dark:bg-slate-700/50 border-2 border-slate-100 dark:border-slate-700/50 rounded-2xl">
+                    <span className="text-sm font-black text-slate-500">إظهار غير النشط</span>
+                    <button
+                        onClick={() => setShowInactive(!showInactive)}
+                        className={`w-12 h-6 rounded-full p-1 transition-colors relative ${showInactive ? 'bg-[var(--color-header)]' : 'bg-slate-300'}`}
+                    >
+                        <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${showInactive ? '-translate-x-6' : 'translate-x-0'}`} />
+                    </button>
+                </div>
+
                 <div className="relative">
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-sm">filter_list</span>
                     <select
                         value={selectedBranch}
-                        onChange={(e) => setSelectedBranch(e.target.value)}
+                        onChange={(e) => {
+                            setSelectedBranch(e.target.value);
+                            safeSessionSet('payments_selectedBranch', e.target.value);
+                        }}
                         className="w-full pr-10 pl-4 py-3 bg-slate-50 dark:bg-slate-700/50 border-none rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-header)] transition-all font-bold text-sm appearance-none"
                     >
                         {branches.map(b => <option key={b} value={b}>{b === 'الكل' ? 'جميع الفروع' : b}</option>)}
@@ -619,7 +630,10 @@ const RestaurantPaymentsPage: React.FC = () => {
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-sm">event_repeat</span>
                     <select
                         value={selectedPaymentPeriod}
-                        onChange={(e) => setSelectedPaymentPeriod(e.target.value)}
+                        onChange={(e) => {
+                            setSelectedPaymentPeriod(e.target.value);
+                            safeSessionSet('payments_selectedPaymentPeriod', e.target.value);
+                        }}
                         className="w-full pr-10 pl-4 py-3 bg-slate-50 dark:bg-slate-700/50 border-none rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-header)] transition-all font-bold text-sm appearance-none"
                     >
                         <option value="الكل">جميع الفترات</option>
@@ -641,7 +655,11 @@ const RestaurantPaymentsPage: React.FC = () => {
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-sm">sort</span>
                     <select
                         value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value as any)}
+                        onChange={(e) => {
+                            const val = e.target.value as any;
+                            setSortBy(val);
+                            safeSessionSet('payments_sortBy', val);
+                        }}
                         className="w-full pr-10 pl-4 py-3 bg-slate-50 dark:bg-slate-700/50 border-none rounded-xl outline-none focus:ring-2 focus:ring-[var(--color-header)] transition-all font-bold text-sm appearance-none"
                     >
                         <option value="branch">الفرع + العملة</option>
@@ -653,7 +671,7 @@ const RestaurantPaymentsPage: React.FC = () => {
             </div>
 
             {/* Result Count + Items Per Page */}
-            <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center justify-between flex-wrap gap-3" >
                 <div className="flex items-center gap-3 text-sm font-bold text-slate-500 dark:text-slate-400">
                     <span className="material-symbols-outlined text-lg">info</span>
                     عرض {sortedAndFilteredRestaurants.length} من {restaurants.length} مطعم
@@ -665,8 +683,8 @@ const RestaurantPaymentsPage: React.FC = () => {
                             key={val}
                             onClick={() => handleItemsPerPageChange(val)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${itemsPerPage === val
-                                    ? 'bg-[var(--color-header)] text-white shadow-md'
-                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                                ? 'bg-[var(--color-header)] text-white shadow-md'
+                                : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
                                 }`}
                         >
                             {val === 0 ? 'الكل' : val}
@@ -676,7 +694,7 @@ const RestaurantPaymentsPage: React.FC = () => {
             </div>
 
             {/* Groups by Branch */}
-            <div className="space-y-12">
+            <div className="space-y-12" >
                 {(Object.entries(groupedByBranch) as [string, Restaurant[]][]).map(([branch, list]) => {
                     const currentPage = getBranchPage(branch);
                     const effectivePerPage = itemsPerPage === 0 ? list.length : itemsPerPage;
@@ -700,22 +718,6 @@ const RestaurantPaymentsPage: React.FC = () => {
                                     </h2>
                                     <p className="text-slate-500 font-bold mt-2">إجمالي المطاعم: {list.length} {totalPages > 1 && <span className="text-xs text-slate-400">• صفحة {currentPage} من {totalPages}</span>}</p>
                                 </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => exportBranchExcel(branch)}
-                                        className="px-5 py-3 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-all flex items-center gap-2 shadow-lg shadow-emerald-600/20"
-                                    >
-                                        <span className="material-symbols-outlined">table_chart</span>
-                                        تصدير Excel
-                                    </button>
-                                    <button
-                                        onClick={() => exportBranchPDF(branch)}
-                                        className="px-5 py-3 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-600/20"
-                                    >
-                                        <span className="material-symbols-outlined">picture_as_pdf</span>
-                                        تصدير PDF
-                                    </button>
-                                </div>
                             </div>
 
                             {/* List - Table Style but Modern */}
@@ -726,6 +728,12 @@ const RestaurantPaymentsPage: React.FC = () => {
                                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">المطعم</th>
                                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">العملة</th>
                                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">رصيد المطعم</th>
+                                            <th className="px-6 py-4 text-xs font-black text-emerald-600 uppercase">
+                                                <div className="flex flex-col">
+                                                    <span>رصيد النظام (تلقائي)</span>
+                                                    {syncMetadata && <span className="text-[9px] opacity-70 font-normal">{new Date(syncMetadata.lastSync).toLocaleDateString('ar-SA')}</span>}
+                                                </div>
+                                            </th>
                                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">حساب التحويل (الأساسي)</th>
                                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">فترة السداد</th>
                                         </tr>
@@ -753,6 +761,19 @@ const RestaurantPaymentsPage: React.FC = () => {
                                                         <p className="text-xl font-black text-[var(--color-header)]">
                                                             {(r.balance || 0).toLocaleString()}
                                                         </p>
+                                                    </td>
+                                                    <td className="px-6 py-5">
+                                                        {(() => {
+                                                            const sysAccNum = r.systemAccountNumber || r.restaurantAccountNumber;
+                                                            if (!sysAccNum) return <span className="text-[10px] text-slate-400 italic">غير مربوط</span>;
+                                                            const matchedBalance = systemBalances.find(sb => sb.accountNumber === sysAccNum && sb.type === 'restaurant');
+                                                            if (!matchedBalance) return <span className="text-[10px] text-amber-500 italic">لا توجد بيانات</span>;
+                                                            return (
+                                                                <p className="text-lg font-black text-emerald-600 dark:text-emerald-400" dir="ltr">
+                                                                    {matchedBalance.balance.toLocaleString()}
+                                                                </p>
+                                                            );
+                                                        })()}
                                                     </td>
                                                     <td className="px-6 py-5">
                                                         {primaryAcc ? (
@@ -829,37 +850,38 @@ const RestaurantPaymentsPage: React.FC = () => {
             </div>
 
             {/* Matching Modal */}
-            {isMatchingModalOpen && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-scale-in" dir="rtl">
-                        <div className="p-6 bg-slate-800 text-white flex items-center justify-between">
-                            <h2 className="text-2xl font-black flex items-center gap-3">
-                                <span className="material-symbols-outlined">analytics</span>
-                                مطابقة واستخراج الأرصدة
-                            </h2>
-                            <button onClick={() => setIsMatchingModalOpen(false)} className="hover:rotate-90 transition-transform">
-                                <span className="material-symbols-outlined">close</span>
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-2xl space-y-3">
-                                <p className="text-amber-800 dark:text-amber-400 text-sm font-bold flex items-center gap-2">
-                                    <span className="material-symbols-outlined">extension</span>
-                                    طريقة استخدام "إضافة المتصفح" (Tawseel Helper):
-                                </p>
-                                <ol className="text-xs text-amber-900/70 dark:text-amber-400/70 list-decimal mr-5 font-bold space-y-2">
-                                    <li>افتح المجلد، وأنشئ ملفاً عادياً باسم <code className="bg-amber-100 px-1 rounded">manifest.json</code> وألصق الكود (1) فيه.</li>
-                                    <li>أنشئ ملفاً آخر باسم <code className="bg-amber-100 px-1 rounded">content.js</code> وألصق الكود (2) فيه.</li>
-                                    <li>افتح <code className="text-blue-600">chrome://extensions</code>، فعل <span className="text-red-600">Developer Mode</span>، ثم اضغط على <span className="font-black">Load Unpacked</span> واختر المجلد.</li>
-                                    <li>افتح صفحة <a href="https://tawseel.app/admin/accounting/market" target="_blank" className="text-blue-600 underline font-black">أرصدة المطاعم في توصيل ون</a>.</li>
-                                    <li>ستظهر أيقونة "سحاب البيانات" عائمة في الأسفل؛ اضغط عليها وسيرسل البيانات هنا تلقائياً.</li>
-                                </ol>
+            {
+                isMatchingModalOpen && (
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+                        <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-scale-in" dir="rtl">
+                            <div className="p-6 bg-slate-800 text-white flex items-center justify-between">
+                                <h2 className="text-2xl font-black flex items-center gap-3">
+                                    <span className="material-symbols-outlined">analytics</span>
+                                    مطابقة واستخراج الأرصدة
+                                </h2>
+                                <button onClick={() => setIsMatchingModalOpen(false)} className="hover:rotate-90 transition-transform">
+                                    <span className="material-symbols-outlined">close</span>
+                                </button>
+                            </div>
+                            <div className="p-6 space-y-4">
+                                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-2xl space-y-3">
+                                    <p className="text-amber-800 dark:text-amber-400 text-sm font-bold flex items-center gap-2">
+                                        <span className="material-symbols-outlined">extension</span>
+                                        طريقة استخدام "إضافة المتصفح" (Tawseel Helper):
+                                    </p>
+                                    <ol className="text-xs text-amber-900/70 dark:text-amber-400/70 list-decimal mr-5 font-bold space-y-2">
+                                        <li>افتح المجلد، وأنشئ ملفاً عادياً باسم <code className="bg-amber-100 px-1 rounded">manifest.json</code> وألصق الكود (1) فيه.</li>
+                                        <li>أنشئ ملفاً آخر باسم <code className="bg-amber-100 px-1 rounded">content.js</code> وألصق الكود (2) فيه.</li>
+                                        <li>افتح <code className="text-blue-600">chrome://extensions</code>، فعل <span className="text-red-600">Developer Mode</span>، ثم اضغط على <span className="font-black">Load Unpacked</span> واختر المجلد.</li>
+                                        <li>افتح صفحة <a href="https://tawseel.app/admin/accounting/market" target="_blank" className="text-blue-600 underline font-black">أرصدة المطاعم في توصيل ون</a>.</li>
+                                        <li>ستظهر أيقونة "سحاب البيانات" عائمة في الأسفل؛ اضغط عليها وسيرسل البيانات هنا تلقائياً.</li>
+                                    </ol>
 
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-[10px] font-bold text-amber-800">
-                                        <span>كود (1): manifest.json</span>
-                                        <button onClick={() => {
-                                            const code = `{
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between text-[10px] font-bold text-amber-800">
+                                            <span>كود (1): manifest.json</span>
+                                            <button onClick={() => {
+                                                const code = `{
   "manifest_version": 3,
   "name": "مساعد توصيل ون",
   "version": "1.0",
@@ -870,48 +892,169 @@ const RestaurantPaymentsPage: React.FC = () => {
     "all_frames": true
   }]
 }`;
-                                            navigator.clipboard.writeText(code);
-                                            alert('تم نسخ كود manifest.json المطور');
-                                        }} className="text-blue-600 hover:underline">نسخ كود manifest المطور</button>
+                                                navigator.clipboard.writeText(code);
+                                                alert('تم نسخ كود manifest.json المطور');
+                                            }} className="text-blue-600 hover:underline">نسخ كود manifest المطور</button>
+                                        </div>
+                                        <div className="flex items-center justify-between text-[10px] font-bold text-amber-800">
+                                            <span>كود (2): content.js</span>
+                                            <button onClick={() => {
+                                                const code = `// مساعد توصيل ون - استخراج الأرصدة المتطور جداً\nfunction scrapeData() {\n  const rows = Array.from(document.querySelectorAll('tr'));\n  if (rows.length === 0) { alert("⚠️ لم يتم العثور على أي صفوف في الصفحة."); return; }\n  const data = rows.map(r => {\n    const cells = Array.from(r.querySelectorAll('td, th'));\n    if (cells.length <6) return null;\n    const id = cells[0].innerText.trim();\n    const balance = cells[5].innerText.replace(/,/g, '').trim();\n    if (!id || id === "رقم الحساب" || isNaN(parseFloat(balance))) return null;\n    return id + '\\t' + balance;\n  }).filter(Boolean).join('\\n');\n  if (data) {\n    if (window.opener) {\n      window.opener.postMessage(data, "*");\n      alert("✅ نجاح: تم استخراج " + data.split('\\n').length + " سجل وإرسالها بنجاح!");\n    } else {\n      const el = document.createElement('textarea');\n      el.value = data; document.body.appendChild(el); el.select();\n      document.execCommand('copy'); document.body.removeChild(el);\n      alert("✅ تم نسخ " + data.split('\\n').length + " سجل للذاكرة!");\n    }\n  } else {\n    alert("❌ لم يتم العثور على أرصدة صالحة. تأكد من ظهور الجدول.");\n  }\n}\n\nfunction initHelper() {\n  if (document.getElementById('tawseel-helper-btn')) return;\n  const target = document.body || document.documentElement;\n  if (!target) return;\n  const btn = document.createElement('button');\n  btn.id = 'tawseel-helper-btn';\n  btn.innerHTML = '🚀 سحب بيانات المطاعم';\n  btn.style.cssText = 'position:fixed;bottom:40px;right:40px;z-index:2147483647 !important;padding:15px 30px;background:#e91e63 !important;color:white !important;border:4px solid white !important;border-radius:50px !important;cursor:pointer;font-weight:900 !important;box-shadow:0 10px 30px rgba(233,30,99,0.6) !important;font-size:18px !important;';\n  btn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); scrapeData(); };\n  target.appendChild(btn);\n}\n\nconst obs = new MutationObserver(() => initHelper());\nif (document.body) obs.observe(document.body, { childList: true, subtree: true });\nsetInterval(initHelper, 2000);\ninitHelper();`;
+                                                navigator.clipboard.writeText(code);
+                                                alert('تم نسخ كود content.js المطور جداً');
+                                            }} className="text-blue-600 hover:underline">نسخ الكود المطور جداً</button>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center justify-between text-[10px] font-bold text-amber-800">
-                                        <span>كود (2): content.js</span>
-                                        <button onClick={() => {
-                                            const code = `// مساعد توصيل ون - استخراج الأرصدة المتطور جداً\nfunction scrapeData() {\n  const rows = Array.from(document.querySelectorAll('tr'));\n  if (rows.length === 0) { alert("⚠️ لم يتم العثور على أي صفوف في الصفحة."); return; }\n  const data = rows.map(r => {\n    const cells = Array.from(r.querySelectorAll('td, th'));\n    if (cells.length < 6) return null;\n    const id = cells[0].innerText.trim();\n    const balance = cells[5].innerText.replace(/,/g, '').trim();\n    if (!id || id === "رقم الحساب" || isNaN(parseFloat(balance))) return null;\n    return id + '\\t' + balance;\n  }).filter(Boolean).join('\\n');\n  if (data) {\n    if (window.opener) {\n      window.opener.postMessage(data, "*");\n      alert("✅ نجاح: تم استخراج " + data.split('\\n').length + " سجل وإرسالها بنجاح!");\n    } else {\n      const el = document.createElement('textarea');\n      el.value = data; document.body.appendChild(el); el.select();\n      document.execCommand('copy'); document.body.removeChild(el);\n      alert("✅ تم نسخ " + data.split('\\n').length + " سجل للذاكرة!");\n    }\n  } else {\n    alert("❌ لم يتم العثور على أرصدة صالحة. تأكد من ظهور الجدول.");\n  }\n}\n\nfunction initHelper() {\n  if (document.getElementById('tawseel-helper-btn')) return;\n  const target = document.body || document.documentElement;\n  if (!target) return;\n  const btn = document.createElement('button');\n  btn.id = 'tawseel-helper-btn';\n  btn.innerHTML = '🚀 سحب بيانات المطاعم';\n  btn.style.cssText = 'position:fixed;bottom:40px;right:40px;z-index:2147483647 !important;padding:15px 30px;background:#e91e63 !important;color:white !important;border:4px solid white !important;border-radius:50px !important;cursor:pointer;font-weight:900 !important;box-shadow:0 10px 30px rgba(233,30,99,0.6) !important;font-size:18px !important;';\n  btn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); scrapeData(); };\n  target.appendChild(btn);\n}\n\nconst obs = new MutationObserver(() => initHelper());\nif (document.body) obs.observe(document.body, { childList: true, subtree: true });\nsetInterval(initHelper, 2000);\ninitHelper();`;
-                                            navigator.clipboard.writeText(code);
-                                            alert('تم نسخ كود content.js المطور جداً');
-                                        }} className="text-blue-600 hover:underline">نسخ الكود المطور جداً</button>
+                                </div>
+                                <textarea
+                                    value={matchingText}
+                                    onChange={(e) => setMatchingText(e.target.value)}
+                                    placeholder="ألصق البيانات هنا..."
+                                    className="w-full h-64 p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl outline-none focus:border-[var(--color-header)] font-mono text-sm resize-none"
+                                />
+
+                                <div className="flex gap-4">
+                                    <button
+                                        disabled={isProcessing || !matchingText}
+                                        onClick={handleMatchAndImport}
+                                        className="flex-1 py-4 bg-[var(--color-header)] text-white font-black rounded-2xl shadow-xl hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        {isProcessing ? (
+                                            <>
+                                                <span className="material-symbols-outlined animate-spin">sync</span>
+                                                جاري المعالجة...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="material-symbols-outlined">auto_fix_high</span>
+                                                ابدأ المطابقة الآن
+                                            </>
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={() => setIsMatchingModalOpen(false)}
+                                        className="px-8 py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-black rounded-2xl hover:bg-slate-200 transition-all"
+                                    >
+                                        إلغاء
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+            {/* Export Modal */}
+            {isExportModalOpen && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-scale-in" dir="rtl">
+                        <div className="p-6 bg-emerald-600 text-white flex items-center justify-between">
+                            <h2 className="text-xl font-black flex items-center gap-2">
+                                <span className="material-symbols-outlined">download</span>
+                                تصدير مخصص لكشوفات السداد
+                            </h2>
+                            <button onClick={() => setIsExportModalOpen(false)} className="hover:rotate-90 transition-transform">
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            {/* Format & Scope Selection */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-black text-slate-500">صيغة الملف</label>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setExportFormat('pdf')}
+                                            className={`flex-1 py-2 text-sm font-black rounded-xl border-2 transition-all ${exportFormat === 'pdf' ? 'bg-red-50 text-red-600 border-red-600' : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-700'}`}
+                                        >
+                                            PDF
+                                        </button>
+                                        <button
+                                            onClick={() => setExportFormat('excel')}
+                                            className={`flex-1 py-2 text-sm font-black rounded-xl border-2 transition-all ${exportFormat === 'excel' ? 'bg-emerald-50 text-emerald-600 border-emerald-600' : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-700'}`}
+                                        >
+                                            Excel
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="space-y-2 flex flex-col justify-center">
+                                    <label className="text-xs font-black text-slate-500">تصدير محدد الفروع</label>
+                                    <div className="flex items-center gap-3 mt-2">
+                                        <input
+                                            type="checkbox"
+                                            id="specific_export_checkbox"
+                                            checked={isSpecificExport}
+                                            onChange={(e) => setIsSpecificExport(e.target.checked)}
+                                            className="w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500"
+                                        />
+                                        <label htmlFor="specific_export_checkbox" className="text-sm font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                                            تحديد فروع معينة
+                                        </label>
                                     </div>
                                 </div>
                             </div>
-                            <textarea
-                                value={matchingText}
-                                onChange={(e) => setMatchingText(e.target.value)}
-                                placeholder="ألصق البيانات هنا..."
-                                className="w-full h-64 p-4 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl outline-none focus:border-[var(--color-header)] font-mono text-sm resize-none"
-                            />
 
-                            <div className="flex gap-4">
-                                <button
-                                    disabled={isProcessing || !matchingText}
-                                    onClick={handleMatchAndImport}
-                                    className="flex-1 py-4 bg-[var(--color-header)] text-white font-black rounded-2xl shadow-xl hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-slate-500">ترتيب التصدير الداخلي حسب</label>
+                                <select
+                                    value={exportSortBy}
+                                    onChange={(e) => setExportSortBy(e.target.value as any)}
+                                    className="w-full p-3 bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-600 font-bold appearance-none"
                                 >
-                                    {isProcessing ? (
-                                        <>
-                                            <span className="material-symbols-outlined animate-spin">sync</span>
-                                            جاري المعالجة...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="material-symbols-outlined">auto_fix_high</span>
-                                            ابدأ المطابقة الآن
-                                        </>
-                                    )}
+                                    <option value="branch">الفرع</option>
+                                    <option value="type">نوع الحساب</option>
+                                </select>
+                            </div>
+
+                            {isSpecificExport && (
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs font-black text-slate-500">تحديد الفروع المطلوبة</label>
+                                        <button
+                                            onClick={() => {
+                                                const allActualBranches = branches.filter(b => b !== 'الكل');
+                                                setSelectedExportBranches(selectedExportBranches.length === allActualBranches.length ? [] : allActualBranches);
+                                            }}
+                                            className="text-[10px] font-bold text-emerald-600 hover:underline"
+                                        >
+                                            تحديد الكل / إلغاء تحديد الكل
+                                        </button>
+                                    </div>
+                                    <div className="max-h-48 overflow-y-auto bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-2 grid grid-cols-2 gap-2">
+                                        {branches.filter(b => b !== 'الكل').map(branch => (
+                                            <div key={branch} className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition">
+                                                <input
+                                                    type="checkbox"
+                                                    id={`export_branch_${branch}`}
+                                                    checked={selectedExportBranches.includes(branch)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedExportBranches([...selectedExportBranches, branch]);
+                                                        } else {
+                                                            setSelectedExportBranches(selectedExportBranches.filter(b => b !== branch));
+                                                        }
+                                                    }}
+                                                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                                                />
+                                                <label htmlFor={`export_branch_${branch}`} className="text-sm font-bold text-slate-700 dark:text-slate-300 cursor-pointer flex-1">
+                                                    {branch}
+                                                </label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="pt-4 flex gap-3">
+                                <button
+                                    onClick={exportAllHandler}
+                                    disabled={selectedExportBranches.length === 0}
+                                    className="flex-1 py-4 bg-emerald-600 text-white font-black rounded-xl shadow-lg hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    بدء التصدير ({selectedExportBranches.length} فرع)
                                 </button>
                                 <button
-                                    onClick={() => setIsMatchingModalOpen(false)}
-                                    className="px-8 py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-black rounded-2xl hover:bg-slate-200 transition-all"
+                                    onClick={() => setIsExportModalOpen(false)}
+                                    className="px-6 py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-black rounded-xl hover:bg-slate-200 transition-all"
                                 >
                                     إلغاء
                                 </button>
