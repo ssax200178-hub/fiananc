@@ -59,6 +59,10 @@ const ScrapingOperationsPage: React.FC = () => {
   });
   const [statementsToDate, setStatementsToDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
+  // Debug State
+  const [debugResult, setDebugResult] = useState<any>(null);
+  const [debugLoading, setDebugLoading] = useState(false);
+
   // Listen to Firestore worker status
   useEffect(() => {
     if (!db) return;
@@ -89,7 +93,13 @@ const ScrapingOperationsPage: React.FC = () => {
         body: JSON.stringify(body),
       });
 
-      const data = await res.json();
+      const textResponse = await res.text();
+      let data;
+      try {
+        data = JSON.parse(textResponse);
+      } catch (parseError) {
+        throw new Error(`تعذر قراءة رد الخادم. (الخطأ: غير صالح كـ JSON). يرجى التأكد من أن التحديثات قد رُفعت إلى الخادم السحابي بنجاح.`);
+      }
 
       if (!res.ok) {
         throw new Error(data.error || `HTTP ${res.status}`);
@@ -115,12 +125,6 @@ const ScrapingOperationsPage: React.FC = () => {
     }
   };
 
-  const isWorkerBusy = workerStatus === 'running';
-
-  // ─── Debug: inspect drivers table structure ───
-  const [debugResult, setDebugResult] = useState<any>(null);
-  const [debugLoading, setDebugLoading] = useState(false);
-
   const runDebugDriversTable = async () => {
     setDebugLoading(true);
     setDebugResult(null);
@@ -133,11 +137,13 @@ const ScrapingOperationsPage: React.FC = () => {
       const data = await res.json();
       setDebugResult(data);
     } catch (err: any) {
-      setDebugResult({ error: err.message });
+      setDebugResult({ error: "الرابط غير موجود في الخادم السحابي، هل تأكدت من رفع التحديثات؟ (" + err.message + ")" });
     } finally {
       setDebugLoading(false);
     }
   };
+
+  const isWorkerBusy = workerStatus === 'running';
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-20" dir="rtl">
@@ -145,10 +151,10 @@ const ScrapingOperationsPage: React.FC = () => {
       <div>
         <h1 className="text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3">
           <span className="material-symbols-outlined text-4xl text-blue-500">cloud_download</span>
-          عمليات السحب من تَوصيل
+          دليل عمليات السحب الشامل
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-1 font-bold">
-          تشغيل عمليات سحب محددة من الخادم السحابي مع فلاتر مخصصة
+          واجهة مخصصة لتنفيذ ومراقبة عمليات سحب البيانات من منصة تَوصيل، مع إمكانية الفلترة وتحديد نطاق العمليات.
         </p>
       </div>
 
@@ -176,13 +182,19 @@ const ScrapingOperationsPage: React.FC = () => {
         iconColor="text-indigo-500"
         bgColor="bg-indigo-50 dark:bg-indigo-900/20"
         borderColor="border-indigo-200 dark:border-indigo-800"
-        title="السحب الرئيسي الشامل"
-        description="يسحب الأرصدة المالية لجميع الأنواع (مطاعم، بنوك، موصلين، موظفين) ثم تفاصيل الكباتن وبيانات المتاجر. العملية الأكثر شمولاً."
+        title="السحب الرئيسي الشامل (تحديث يومي)"
+        sourceUrl="https://tawseel.app/admin/accounting/report/monthly (وما يشابهها)"
+        description="هذه العملية الشاملة تسحب جميع البيانات الأساسية: أرصدة جميع المتاجر، أرصدة البنوك، أرصدة وتفاصيل الموصلين، أرصدة الموظفين المصرحين، تفاصيل المحافظ وتفاصيل الاتصال الخاصة بالمتاجر."
+        notes={[
+          "يسحب من كل الأنظمة وجميع الفروع.",
+          "هذه العملية هي الأطول والأكثر شمولاً (تستغرق من 3 إلى 5 دقائق).",
+          "تستخدم كمرجع أساسي لأرصدة النظام قبل أي عمليات مطابقة."
+        ]}
         badge="start-job"
         job={mainJob}
         disabled={isWorkerBusy && !mainJob.loading}
         onRun={() => callServer('/start-job', { trigger: 'manual' }, setMainJob)}
-        buttonLabel="تشغيل السحب الكامل"
+        buttonLabel="تشغيل السحب الكامل لجميع البيانات"
         buttonIcon="rocket_launch"
       />
 
@@ -192,8 +204,14 @@ const ScrapingOperationsPage: React.FC = () => {
         iconColor="text-orange-500"
         bgColor="bg-orange-50 dark:bg-orange-900/20"
         borderColor="border-orange-200 dark:border-orange-800"
-        title="كشف أرصدة الموصلين / الكباتن"
-        description={`يسحب أرصدة الائتمان لكل كابتن بالتفصيل من صفحة المحاسبة. يدعم الفلترة حسب الفرع ونوع العملة (ريال جديد / ريال قديم). يُحفظ في مجموعة scraped_driver_credits.`}
+        title="كشف أرصدة وتفاصيل الموصلين (الكباتن)"
+        sourceUrl="https://tawseel.app/admin/accounting/delivery/credit"
+        description="يسحب هذه العملية جدول الأرصدة المالية الخاصة بكل كابتن (موصل). ويدعم اختيار الفرع لمعالجة بيانات منطقة محددة."
+        notes={[
+          "يتم السحب بنوعي العملة تلقائياً: ريال جديد (كود 7) وريال قديم (كود 8).",
+          "إذا قمت باختيار 'جميع الفروع'، سيمر الخادم على كل فرع بالتسلسل لضمان عدم حظر الحساب.",
+          "البيانات المستخرجة يتم حفظها في جدول منفصل (scraped_driver_credits)."
+        ]}
         badge="/scrape-driver-credits"
         job={driverCreditsJob}
         disabled={isWorkerBusy && !driverCreditsJob.loading}
@@ -201,14 +219,9 @@ const ScrapingOperationsPage: React.FC = () => {
         buttonLabel="سحب أرصدة الموصلين"
         buttonIcon="payments"
       >
-        {/* Filter: Branch */}
         <FilterRow label="الفرع المستهدف" icon="location_on">
           <BranchSelect value={driverCreditsBranch} onChange={setDriverCreditsBranch} />
         </FilterRow>
-        <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-2">
-          <span className="material-symbols-outlined text-sm">info</span>
-          سيتم سحب البيانات بعملتي الريال الجديد (7) والريال القديم (8) لكل فرع
-        </div>
       </OperationCard>
 
       {/* ─── 3. دفاتر الفواتير (Invoice Books) ─── */}
@@ -217,8 +230,14 @@ const ScrapingOperationsPage: React.FC = () => {
         iconColor="text-purple-500"
         bgColor="bg-purple-50 dark:bg-purple-900/20"
         borderColor="border-purple-200 dark:border-purple-800"
-        title="تقرير دفاتر الفواتير"
-        description="يسحب ملخصات دفاتر الفواتير مع تفاصيل الكتب الفردية (مكتمل، غير مكتمل، تم استلامه). يدعم تحديد نطاق الفواتير والفرع."
+        title="تقرير حالة دفاتر الفواتير (Invoice Books)"
+        sourceUrl="https://tawseel.app/admin/report/booksinvoice"
+        description="يسحب ملخصات الدفاتر (نطاقات الأرقام، الكميات المصروفة، التواريخ) بالإضافة إلى سحب التفاصيل لكل دفتر على حدة لمعرفة حالة كل دفتر (مكتمل، غير مكتمل، تم تسليمه)."
+        notes={[
+          "هذه العملية مهمة لمطابقة الفواتير الورقية، حيث توضح الدفاتر التي لم يتم إرجاعها بعد.",
+          "يمكنك تحديد نطاق أرقام الفواتير لتقليل حجم البيانات المسحوبة وتسريع العملية.",
+          "إذا وضعت من 1 إلى 999999 سيتم جلب كل تاريخ الدفاتر."
+        ]}
         badge="/scrape-invoice-books"
         job={invoiceBooksJob}
         disabled={isWorkerBusy && !invoiceBooksJob.loading}
@@ -227,7 +246,7 @@ const ScrapingOperationsPage: React.FC = () => {
           toInvoice: invoiceBooksTo,
           branch: invoiceBooksBranch,
         }, setInvoiceBooksJob)}
-        buttonLabel="سحب دفاتر الفواتير"
+        buttonLabel="سحب حالة دفاتر الفواتير"
         buttonIcon="library_books"
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -263,8 +282,14 @@ const ScrapingOperationsPage: React.FC = () => {
         iconColor="text-rose-500"
         bgColor="bg-rose-50 dark:bg-rose-900/20"
         borderColor="border-rose-200 dark:border-rose-800"
-        title="كشوفات حساب المطاعم"
-        description="يسحب كشف الحساب التفصيلي لكل مطعم (مدين، دائن، تراكمي، تاريخ القيد) خلال فترة زمنية محددة. يُحفظ في scraped_restaurant_statements."
+        title="كشوفات حساب المطاعم (تفصيلي)"
+        sourceUrl="https://tawseel.app/admin/accounting/market/statement"
+        description="تسحب هذه العملية قيود الكشف الحسابي لكل مطعم مسجل في قاعدة البيانات (المدين، الدائن، الرصيد التراكمي وتاريخ القيد) حسب نطاق زمني محدد."
+        notes={[
+          "تحذير: هذه العملية ثقيلة جداً وقد تستغرق أكثر من 15 دقيقة إذا كان النطاق الزمني طويلاً.",
+          "تستخدم لغرض مطابقة المديونيات ومعرفة حركة الحساب الدقيقة للمتجر.",
+          "يفضل اختيار فترة لا تتجاوز الشهر لتجنب الإرهاق العالي للخادم."
+        ]}
         badge="/scrape-restaurant-statements"
         job={restaurantStatementsJob}
         disabled={isWorkerBusy && !restaurantStatementsJob.loading}
@@ -272,7 +297,7 @@ const ScrapingOperationsPage: React.FC = () => {
           fromDate: statementsFromDate,
           toDate: statementsToDate,
         }, setRestaurantStatementsJob)}
-        buttonLabel="سحب كشوفات المطاعم"
+        buttonLabel="سحب كشوفات حساب المطاعم"
         buttonIcon="bar_chart"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -293,22 +318,18 @@ const ScrapingOperationsPage: React.FC = () => {
             />
           </FilterRow>
         </div>
-        <div className="mt-2 p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold text-rose-700 dark:text-rose-300 flex items-center gap-2">
-          <span className="material-symbols-outlined text-sm">info</span>
-          سيتم سحب كشوفات جميع المطاعم الموجودة في قائمة الموقع خلال الفترة المحددة. العملية قد تستغرق وقتاً.
-        </div>
       </OperationCard>
 
       {/* ─── Debug: Drivers Table Structure ─── */}
       <details className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 overflow-hidden shadow-sm">
         <summary className="px-5 py-4 cursor-pointer flex items-center gap-3 text-sm font-black text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors select-none">
           <span className="material-symbols-outlined text-slate-400">bug_report</span>
-          تشخيص جدول الموصلين (للمطورين)
+          أداة فحص واجهات السحب (للمطورين وتشخيص الأخطاء)
           <span className="mr-auto text-xs font-normal text-slate-400">POST /debug-drivers-table</span>
         </summary>
         <div className="p-5 border-t border-slate-200 dark:border-slate-700 space-y-3">
           <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
-            يفحص بنية جدول الموصلين في tawseel.app ويعيد أسماء الأعمدة وأول صفين من البيانات — مفيد عند فشل السحب بسبب تغيير ترتيب الأعمدة.
+            تُستخدم هذه الأداة للتحقق من تغير بنية الجداول في نظام تَوصيل (تغيير اسم العمود أو ترتيبه) والذي قد يؤدي إلى فشل عمليات السحب.
           </p>
           <button
             onClick={runDebugDriversTable}
@@ -318,7 +339,7 @@ const ScrapingOperationsPage: React.FC = () => {
             <span className={`material-symbols-outlined text-sm ${debugLoading ? 'animate-spin' : ''}`}>
               {debugLoading ? 'sync' : 'search'}
             </span>
-            {debugLoading ? 'جاري الفحص...' : 'فحص بنية الجدول الآن'}
+            {debugLoading ? 'جاري الفحص المباشر...' : 'فحص بنية جدول الكباتن الآن'}
           </button>
 
           {debugResult && (
@@ -331,9 +352,9 @@ const ScrapingOperationsPage: React.FC = () => {
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 text-xs font-bold">
                     <span className={`px-2 py-1 rounded-lg ${debugResult.isLoginPage ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                      {debugResult.isLoginPage ? '⚠️ الجلسة منتهية - تم التحويل لصفحة تسجيل الدخول' : '✅ تم الوصول للصفحة بنجاح'}
+                      {debugResult.isLoginPage ? '⚠️ خطأ: الجلسة منتهية - تم التحويل لصفحة تسجيل الدخول' : '✅ تم الوصول للصفحة والتحقق من الجلسة بنجاح'}
                     </span>
-                    <span className="text-slate-500">{debugResult.tablesFound} جدول موجود</span>
+                    <span className="text-slate-500">{debugResult.tablesFound} جدول بيانات تم العثور عليه</span>
                   </div>
                   {debugResult.tables?.map((table: any, ti: number) => (
                     <div key={ti} className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
@@ -343,7 +364,7 @@ const ScrapingOperationsPage: React.FC = () => {
                       </div>
                       {table.headers.length > 0 && (
                         <div className="px-3 py-2 bg-indigo-50 dark:bg-indigo-900/20 text-xs">
-                          <span className="font-black text-indigo-700 dark:text-indigo-300">رؤوس الأعمدة: </span>
+                          <span className="font-black text-indigo-700 dark:text-indigo-300">رؤوس الأعمدة المُكتشفة: </span>
                           <span className="font-mono text-slate-600 dark:text-slate-300">
                             {table.headers.map((h: string, i: number) => `[${i}] ${h}`).join(' | ')}
                           </span>
@@ -351,7 +372,7 @@ const ScrapingOperationsPage: React.FC = () => {
                       )}
                       {table.sampleRows.map((row: any[], ri: number) => (
                         <div key={ri} className="px-3 py-2 border-t border-slate-100 dark:border-slate-700 text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                          الصف {ri + 1}: {row.map((c: any) => `[${c.col}]"${c.text}"`).join(' | ')}
+                          بيانات الصف {ri + 1}: {row.map((c: any) => `[${c.col}]"${c.text}"`).join(' | ')}
                         </div>
                       ))}
                     </div>
@@ -367,18 +388,18 @@ const ScrapingOperationsPage: React.FC = () => {
       <div className="p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-400 space-y-2">
         <div className="flex items-center gap-2 text-slate-800 dark:text-white font-black mb-3">
           <span className="material-symbols-outlined text-blue-500">help</span>
-          ملاحظات هامة
+          معلومات تقنية لعملية السحب
         </div>
         <ul className="space-y-2 list-none">
           {[
             'يجب أن يكون الخادم السحابي (Render) متاحاً وأن تكون الجلسة صالحة قبل تشغيل أي عملية.',
-            'بعد إرسال الأمر، يمكنك متابعة التقدم عبر سجل العمليات في صفحة مركز الأتمتة.',
-            'عمليات السحب تعمل في الخلفية - لا تحتاج لإبقاء هذه الصفحة مفتوحة.',
-            'في حال فشل الاتصال، تأكد من صحة رابط الخادم ومفتاح API في إعدادات مركز الأتمتة.',
+            'رسالة الخطأ "Unexpected token" تعني أن الخادم قام بإرجاع صفحة HTML بدلاً من JSON، وهو ما يحدث عادة عندما يكون رابط العملية غير موجود (التحديث لم يرفع بعد) أو عند وجود خطأ داخلي في الخادم.',
+            'عمليات السحب تعمل بالخلفية بشكل كامل، فلا داعي لإبقاء هذه الصفحة مفتوحة بعد ظهور رسالة "تم إرسال الأمر".',
+            'يمكنك دائماً متابعة السجل الحي للعملية من "مركز السحب والأتمتة".'
           ].map((note, i) => (
             <li key={i} className="flex items-start gap-2">
-              <span className="material-symbols-outlined text-blue-400 text-sm mt-0.5">check_circle</span>
-              {note}
+              <span className="material-symbols-outlined text-blue-400 text-sm mt-0.5">info</span>
+              <span className="leading-relaxed">{note}</span>
             </li>
           ))}
         </ul>
@@ -395,7 +416,9 @@ interface OperationCardProps {
   bgColor: string;
   borderColor: string;
   title: string;
+  sourceUrl: string;
   description: string;
+  notes: string[];
   badge: string;
   job: JobState;
   disabled: boolean;
@@ -407,19 +430,21 @@ interface OperationCardProps {
 
 const OperationCard: React.FC<OperationCardProps> = ({
   icon, iconColor, bgColor, borderColor,
-  title, description, badge,
+  title, sourceUrl, description, notes, badge,
   job, disabled, onRun, buttonLabel, buttonIcon,
   children
 }) => (
   <div className={`rounded-2xl border ${borderColor} ${bgColor} overflow-hidden shadow-sm`}>
     {/* Card Header */}
-    <div className="px-5 py-4 flex items-center gap-4 border-b border-black/5 dark:border-white/5">
+    <div className="px-5 py-4 flex items-center gap-4 border-b border-black/5 dark:border-white/5 bg-white/40 dark:bg-slate-900/40">
       <div className="size-12 rounded-2xl bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm border border-black/5 dark:border-white/10 shrink-0">
         <span className={`material-symbols-outlined text-2xl ${iconColor}`}>{icon}</span>
       </div>
       <div className="flex-1 min-w-0">
         <h3 className="font-black text-slate-900 dark:text-white text-base">{title}</h3>
-        <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{description}</p>
+        <p className="text-[11px] font-mono text-blue-600 dark:text-blue-400 mt-1 truncate" dir="ltr" title={sourceUrl}>
+          {sourceUrl}
+        </p>
       </div>
       <span className="hidden md:inline-block text-[10px] font-mono bg-black/10 dark:bg-white/10 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-lg shrink-0">
         POST {badge}
@@ -428,12 +453,26 @@ const OperationCard: React.FC<OperationCardProps> = ({
 
     {/* Card Body */}
     <div className="p-5 space-y-4">
+      {/* Description & Notes */}
+      <div className="space-y-3">
+        <p className="text-sm font-bold text-slate-700 dark:text-slate-300 leading-relaxed">{description}</p>
+        <div className="bg-white/60 dark:bg-slate-900/50 rounded-xl p-3 border border-black/5 dark:border-white/5">
+          <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-sm text-amber-500">sticky_note_2</span>
+            ملاحظات حول العملية:
+          </h4>
+          <ul className="space-y-1.5 list-disc list-inside text-xs font-bold text-slate-600 dark:text-slate-400">
+            {notes.map((n, i) => <li key={i}>{n}</li>)}
+          </ul>
+        </div>
+      </div>
+
       {/* Filters */}
       {children && (
-        <div className="bg-white/70 dark:bg-slate-900/50 rounded-xl p-4 border border-black/5 dark:border-white/5">
+        <div className="bg-white/80 dark:bg-slate-900/70 rounded-xl p-4 border border-black/5 dark:border-white/5">
           <div className="text-xs font-black text-slate-500 dark:text-slate-400 mb-3 flex items-center gap-1.5">
             <span className="material-symbols-outlined text-sm">tune</span>
-            فلاتر العملية
+            تخصيص السحب (الفلاتر)
           </div>
           {children}
         </div>
@@ -475,7 +514,7 @@ const OperationCard: React.FC<OperationCardProps> = ({
         <span className={`material-symbols-outlined text-lg ${job.loading ? 'animate-spin' : ''}`}>
           {job.loading ? 'sync' : buttonIcon}
         </span>
-        {job.loading ? 'جاري الإرسال...' : buttonLabel}
+        {job.loading ? 'جاري إرسال الطلب للخادم السحابي...' : buttonLabel}
       </button>
     </div>
   </div>
