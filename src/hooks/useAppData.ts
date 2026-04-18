@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { onSnapshot, doc, collection, query, orderBy, limit, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
-import { AppContextType, ReconData, FundLineItem, FundSnapshot, FinancialTip, Restaurant, ActivityLog, TransferRequest, Employee, Deduction, LoanRequest, LiquidityMapping, OperationalSheet, Branch, ExchangeRates, DevFeedbackSettings, FeatureFlags, User, UserRole, UserPermission, BankDefinition, OLD_TO_NEW_PERMISSIONS, PaymentAccount, SystemBalance, AccountMapping, SyncMetadata } from '../../AppContext';
+import { AppContextType, ReconData, FundLineItem, FundSnapshot, FinancialTip, Restaurant, ActivityLog, TransferRequest, Employee, Deduction, LoanRequest, LiquidityMapping, OperationalSheet, Branch, ExchangeRates, DevFeedbackSettings, FeatureFlags, User, UserRole, UserPermission, BankDefinition, OLD_TO_NEW_PERMISSIONS, PaymentAccount, SystemBalance, AccountMapping, SyncMetadata, AppCurrency, AutomationConfig } from '../../AppContext';
 import { generateId, saveToStorage, loadFromStorage, safeCompare } from '../../utils';
 
 import { useUsers } from './useUsers';
@@ -141,6 +141,16 @@ export const useAppData = (navigate: any) => {
         const paymentAccountsRef = collection(db, ROOT_COLLECTION, DATA_PATH, 'payment_accounts');
         const draftRef = doc(db, ROOT_COLLECTION, DATA_PATH, 'fund_draft', 'current');
 
+        // Initial Cache Hydration
+        const cachedBalances = localStorage.getItem('cache_system_balances');
+        if (cachedBalances) {
+            try { settingsHook.setSystemBalances(JSON.parse(cachedBalances)); } catch (e) {}
+        }
+        const cachedRestaurants = localStorage.getItem('cache_restaurants');
+        if (cachedRestaurants) {
+            try { restaurantsHook.setRestaurants(JSON.parse(cachedRestaurants)); } catch (e) {}
+        }
+
         const timeoutId = setTimeout(() => {
             if (isLoading) setIsLoading(false);
         }, 10000);
@@ -150,6 +160,10 @@ export const useAppData = (navigate: any) => {
                 const data = docSnap.data();
                 if (data.bankDefinitions) fundsHook.setBankDefinitions(data.bankDefinitions);
                 else fundsHook.setBankDefinitions([]);
+
+                // Cache some metadata
+                localStorage.setItem('cache_theme', data.theme || 'dark');
+                localStorage.setItem('cache_currency', data.currency || 'YER');
 
                 const migrations: any = {};
                 let migrationPerformed = false;
@@ -268,7 +282,9 @@ export const useAppData = (navigate: any) => {
         const unsubscribeRestaurants = onSnapshot(restaurantsRef, (snapshot) => {
             const items: Restaurant[] = [];
             snapshot.forEach(doc => items.push({ ...doc.data(), id: doc.id } as Restaurant));
-            restaurantsHook.setRestaurants(items.sort((a, b) => safeCompare(b.createdAt, a.createdAt)));
+            const sortedItems = items.sort((a, b) => safeCompare(b.createdAt, a.createdAt));
+            restaurantsHook.setRestaurants(sortedItems);
+            localStorage.setItem('cache_restaurants', JSON.stringify(sortedItems));
         });
 
         const unsubscribePaymentAccounts = onSnapshot(paymentAccountsRef, (snapshot) => {
@@ -361,12 +377,24 @@ export const useAppData = (navigate: any) => {
             else settingsHook.setFeatureFlags({});
         });
 
+        const automationConfigRef = doc(db, ROOT_COLLECTION, DATA_PATH, 'settings', 'automation_config');
+        const unsubscribeAutomationConfig = onSnapshot(automationConfigRef, (snapshot) => {
+            if (snapshot.exists()) settingsHook.setAutomationConfig(snapshot.data() as AutomationConfig);
+            else settingsHook.setAutomationConfig(null);
+        });
+
         // System Balances (أرصدة النظام الأساسي)
         const systemBalancesRef = collection(db, ROOT_COLLECTION, DATA_PATH, 'system_balances');
         const unsubscribeSystemBalances = onSnapshot(systemBalancesRef, (snapshot) => {
             const items: SystemBalance[] = [];
-            snapshot.forEach(doc => items.push({ ...doc.data(), id: doc.id } as SystemBalance));
+            snapshot.forEach(doc => {
+                const data = doc.data() as SystemBalance;
+                if (!data.accountName?.includes('إضافة فرع جديد') && !data.accountName?.includes('إضافة صف')) {
+                    items.push({ ...data, id: doc.id });
+                }
+            });
             settingsHook.setSystemBalances(items);
+            localStorage.setItem('cache_system_balances', JSON.stringify(items));
         });
 
         // Account Mappings (ربط الحسابات)
@@ -375,6 +403,14 @@ export const useAppData = (navigate: any) => {
             const items: AccountMapping[] = [];
             snapshot.forEach(doc => items.push({ ...doc.data(), id: doc.id } as AccountMapping));
             settingsHook.setAccountMappings(items);
+        });
+
+        // Custom Currencies (العملات المخصصة)
+        const customCurrenciesRef = collection(db, ROOT_COLLECTION, DATA_PATH, 'custom_currencies');
+        const unsubscribeCustomCurrencies = onSnapshot(customCurrenciesRef, (snapshot) => {
+            const items: AppCurrency[] = [];
+            snapshot.forEach(doc => items.push({ ...doc.data(), id: doc.id } as AppCurrency));
+            settingsHook.setCustomCurrencies(items);
         });
 
         // Sync Metadata (حالة المزامنة)
@@ -407,6 +443,8 @@ export const useAppData = (navigate: any) => {
             unsubscribeSystemBalances();
             unsubscribeAccountMappings();
             unsubscribeSyncMetadata();
+            unsubscribeCustomCurrencies();
+            unsubscribeAutomationConfig();
         };
     }, [auth.currentUser]);
 

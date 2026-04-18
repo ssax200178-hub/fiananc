@@ -69,8 +69,12 @@ const Layout = () => {
             ]
         },
         {
-            title: 'الأدوات',
+            title: 'نظام السحب',
             items: [
+                { label: 'إدارة الجلسة', path: '/scraping/session', icon: 'key', permission: 'automation_manage' },
+                { label: 'مركز السحب والأتمتة', path: '/scraping/hub', icon: 'memory', permission: 'automation_manage' },
+                { label: 'مستعرض البيانات', path: '/scraping/viewer', icon: 'travel_explore', permission: 'automation_manage' },
+                { label: 'معاينة السحب', path: '/scrape-preview', icon: 'preview', permission: 'automation_manage' },
                 { label: 'تحويل الأرصدة المجمعة', path: '/tools/bulk-transfer', icon: 'currency_exchange', permission: 'tools_manage', featureFlag: 'bulk_transfer_tool' },
                 { label: 'مزامنة عملة الحساب', path: '/tools/currency-sync', icon: 'sync', permission: 'tools_manage', featureFlag: 'currency_sync_tool' },
                 { label: 'تقسيم وتسمية PDF', path: '/tools/pdf-splitter', icon: 'picture_as_pdf', permission: 'restaurants_view', featureFlag: 'pdf_splitter' },

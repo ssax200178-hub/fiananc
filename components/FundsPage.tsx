@@ -486,6 +486,30 @@ const FundsPage: React.FC = () => {
                             </button>
                         )}
                         <button
+                            onClick={async () => {
+                                try {
+                                    const { doc: fbDoc, setDoc } = await import('firebase/firestore');
+                                    const { db: fbDb } = await import('../firebase');
+                                    await setDoc(fbDoc(fbDb, 'app', 'v1_data', 'settings', 'scraping_config'), {
+                                        scrapingTrigger: `scrape_${Date.now()}`,
+                                        scrapingType: 'accounting',
+                                        accountSubType: 'bank',
+                                        scrapingStatus: 'triggered',
+                                        scrapingMessage: 'سحب أرصدة البنوك...',
+                                        triggeredAt: new Date().toISOString()
+                                    }, { merge: true });
+                                    addLog('سحب أرصدة', 'طلب سحب أرصدة البنوك من صفحة المطابقة', 'funds');
+                                    alert('✅ تم إرسال طلب سحب أرصدة البنوك. ستتحدث البيانات خلال دقائق.');
+                                } catch (e) {
+                                    alert('❌ فشل إرسال الطلب');
+                                }
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-200 dark:shadow-none"
+                        >
+                            <span className="material-symbols-outlined text-sm">sync</span>
+                            سحب أرصدة البنوك
+                        </button>
+                        <button
                             onClick={() => setIsManageBanksOpen(true)}
                             className="flex items-center gap-2 px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
                         >

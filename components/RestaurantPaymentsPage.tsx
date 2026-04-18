@@ -49,7 +49,19 @@ function getDefaultPaymentDate(): string {
 }
 
 const RestaurantPaymentsPage: React.FC = () => {
-    const { restaurants, updateRestaurant, currentUser, systemBalances, syncMetadata } = useAppContext();
+    const { restaurants: rawRestaurants, updateRestaurant, currentUser, systemBalances, syncMetadata } = useAppContext();
+
+    const restaurants = useMemo(() => {
+        return rawRestaurants.map(r => {
+            const sysAccNum = r.systemAccountNumber || r.restaurantAccountNumber;
+            let finalBalance = r.balance || 0;
+            if (sysAccNum) {
+                const matchedBalance = systemBalances.find(sb => sb.accountNumber === sysAccNum && sb.type === 'restaurant');
+                if (matchedBalance) finalBalance = matchedBalance.balance;
+            }
+            return { ...r, balance: finalBalance };
+        });
+    }, [rawRestaurants, systemBalances]);
 
     const [searchTerm, setSearchTerm] = useState(safeSessionGet('payments_searchTerm', ''));
     const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
@@ -727,11 +739,13 @@ const RestaurantPaymentsPage: React.FC = () => {
                                         <tr className="bg-slate-100/50 dark:bg-slate-800/30">
                                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">المطعم</th>
                                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">العملة</th>
-                                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">رصيد المطعم</th>
                                             <th className="px-6 py-4 text-xs font-black text-emerald-600 uppercase">
                                                 <div className="flex flex-col">
-                                                    <span>رصيد النظام (تلقائي)</span>
-                                                    {syncMetadata && <span className="text-[9px] opacity-70 font-normal">{new Date(syncMetadata.lastSync).toLocaleDateString('ar-SA')}</span>}
+                                                    <span>رصيد المطعم</span>
+                                                    <span className="text-[10px] font-normal opacity-80 mt-1">
+                                                        تحديث آلي 
+                                                        {syncMetadata && ` (${new Date(syncMetadata.lastSync).toLocaleDateString('ar-SA')})`}
+                                                    </span>
                                                 </div>
                                             </th>
                                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase">حساب التحويل (الأساسي)</th>
@@ -758,22 +772,9 @@ const RestaurantPaymentsPage: React.FC = () => {
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-5">
-                                                        <p className="text-xl font-black text-[var(--color-header)]">
+                                                        <p className="text-xl font-black text-[var(--color-header)]" dir="ltr">
                                                             {(r.balance || 0).toLocaleString()}
                                                         </p>
-                                                    </td>
-                                                    <td className="px-6 py-5">
-                                                        {(() => {
-                                                            const sysAccNum = r.systemAccountNumber || r.restaurantAccountNumber;
-                                                            if (!sysAccNum) return <span className="text-[10px] text-slate-400 italic">غير مربوط</span>;
-                                                            const matchedBalance = systemBalances.find(sb => sb.accountNumber === sysAccNum && sb.type === 'restaurant');
-                                                            if (!matchedBalance) return <span className="text-[10px] text-amber-500 italic">لا توجد بيانات</span>;
-                                                            return (
-                                                                <p className="text-lg font-black text-emerald-600 dark:text-emerald-400" dir="ltr">
-                                                                    {matchedBalance.balance.toLocaleString()}
-                                                                </p>
-                                                            );
-                                                        })()}
                                                     </td>
                                                     <td className="px-6 py-5">
                                                         {primaryAcc ? (

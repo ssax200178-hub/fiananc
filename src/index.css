@@ -288,3 +288,238 @@ h4 {
 .btn-premium:hover::after {
   @apply opacity-10;
 }
+
+/* ========================================
+   CHART OF ACCOUNTS - PREMIUM TABLE DESIGN
+   ======================================== */
+
+/* AG Grid Premium Theme Override */
+.ag-theme-premium {
+  --ag-header-height: 52px;
+  --ag-row-height: 50px;
+  --ag-header-background-color: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  --ag-odd-row-background-color: rgba(248, 250, 252, 0.5);
+  --ag-row-hover-color: rgba(59, 130, 246, 0.04);
+  --ag-selected-row-background-color: rgba(59, 130, 246, 0.08);
+  --ag-border-color: rgba(226, 232, 240, 0.6);
+  --ag-font-size: 13px;
+  --ag-font-family: 'Noto Sans Arabic', 'Inter', sans-serif;
+  --ag-alpine-active-color: #3b82f6;
+  --ag-range-selection-border-color: #3b82f6;
+  --ag-checkbox-checked-color: #3b82f6;
+  --ag-row-border-color: rgba(226, 232, 240, 0.4);
+  --ag-header-column-separator-display: none;
+  --ag-borders: none;
+  --ag-cell-horizontal-padding: 16px;
+}
+
+.ag-theme-premium .ag-root-wrapper {
+  border: none !important;
+  border-radius: 1rem !important;
+  overflow: hidden;
+}
+
+.ag-theme-premium .ag-header {
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%) !important;
+  border-bottom: 2px solid rgba(99, 102, 241, 0.1) !important;
+  font-weight: 700 !important;
+}
+
+.ag-theme-premium .ag-header-cell {
+  font-weight: 800 !important;
+  font-size: 11px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #475569 !important;
+}
+
+.ag-theme-premium .ag-row {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.5) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ag-theme-premium .ag-row:hover {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.03) 0%, rgba(99, 102, 241, 0.05) 100%) !important;
+  transform: scale(1.001);
+}
+
+.ag-theme-premium .ag-row-selected {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.06) 0%, rgba(99, 102, 241, 0.08) 100%) !important;
+}
+
+.ag-theme-premium .ag-cell {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: #334155;
+}
+
+.ag-theme-premium .ag-paging-panel {
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%) !important;
+  border-top: 2px solid rgba(99, 102, 241, 0.1) !important;
+  font-weight: 700;
+  height: 48px !important;
+}
+
+/* Checkbox override */
+.ag-theme-premium .ag-checkbox-input-wrapper.ag-checked::after {
+  color: #3b82f6 !important;
+}
+
+/* Staggered Row Entrance Animation */
+@keyframes row-enter {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.ag-theme-premium .ag-row {
+  animation: row-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Import Cards Hover Effects */
+.import-card {
+  @apply relative overflow-hidden transition-all duration-300;
+  background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.9) 100%);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.import-card::before {
+  content: '';
+  @apply absolute inset-0 opacity-0 transition-opacity duration-500;
+  background: radial-gradient(circle at center, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+}
+
+.import-card:hover::before {
+  @apply opacity-100;
+}
+
+.import-card:hover {
+  border-color: rgba(99, 102, 241, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -5px rgba(99, 102, 241, 0.15);
+}
+
+/* Filter Section Premium Style */
+.filter-section {
+  background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.filter-select {
+  @apply transition-all duration-200;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.filter-select:focus {
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.filter-select:hover {
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+/* Floating Action Bar */
+@keyframes float-up {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.floating-action-bar {
+  animation: float-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  box-shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.5);
+}
+
+/* Drawer Slide Animation */
+@keyframes drawer-slide-in {
+  from {
+    transform: translateX(-100%);
+    opacity: 0.5;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.drawer-animate {
+  animation: drawer-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Modal Scale Animation */
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-animate {
+  animation: modal-pop 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Subtle Pulse for Active Badges */
+@keyframes gentle-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.2); }
+  50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+}
+
+.badge-pulse {
+  animation: gentle-pulse 2.5s ease-in-out infinite;
+}
+
+/* Stats Pill */
+.stats-pill {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+/* Premium Input Focus Ring */
+.premium-input {
+  @apply transition-all duration-200;
+}
+
+.premium-input:focus {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12), 0 1px 2px rgba(0, 0, 0, 0.05);
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+/* Page Header Gradient Text */
+.gradient-text {
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Skeleton Shimmer for Loading */
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}

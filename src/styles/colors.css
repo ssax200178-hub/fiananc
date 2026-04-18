@@ -1,0 +1,36 @@
+:root {
+  /* Official Colors - Default */
+  --color-header: #C62828;
+  --color-sidebar: #263238;
+  --color-active: #FFB300;
+  --color-link: #4FC3F7;
+  --color-background: #F5F5F5;
+  --color-success: #4CAF50;
+  --color-positive: #d97706; /* amber-600 */
+  --color-negative: #dc2626; /* red-600 */
+  --color-matched: #10b981;  /* emerald-500 */
+
+  /* Legacy variable names for compatibility */
+  --sidebar-bg: var(--color-sidebar);
+  --header-bg: var(--color-header);
+  --accent-color: var(--color-active);
+  --link-color: var(--color-link);
+  --success-color: var(--color-success);
+}
+
+/* Branch Specific Colors (Dynamic classes) */
+.branch-sanaa { --color-header: #10b981; }
+.branch-aden { --color-header: #3b82f6; }
+.branch-ibb { --color-header: #f59e0b; }
+.branch-dhamar { --color-header: #06b6d4; }
+.branch-taiz-hoban { --color-header: #ec4899; }
+.branch-taiz-city { --color-header: #f472b6; }
+.branch-mukalla { --color-header: #6366f1; }
+.branch-hod { --color-header: #f97316; }
+
+/* Global conflict resolution */
+/* Reset any rogue Bootstrap styles if they ever leak in */
+.modal-backdrop { display: none !important; } /* Bootstrap conflict often causes this */
+.ag-theme-alpine, .ag-theme-premium {
+  font-family: 'Noto Sans Arabic', 'Inter', sans-serif !important;
+}

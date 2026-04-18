@@ -34,3 +34,10 @@ brain/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Credentials & Secrets
+service-account.json
+*.json.base64
+render-server/*.txt
+render-server/*.json
+.env

@@ -7,7 +7,7 @@ import InvoiceBookletPrintModal from './InvoiceBookletPrintModal';
 const InvoiceBatchesPage: React.FC = () => {
     const navigate = useNavigate();
     const { currentUser, branches, addLog, invoiceBatches, addInvoiceBatch, updateInvoiceBatch, deleteInvoiceBatch,
-        invoiceBatchItems, loadBatchItems, addInvoiceBatchItem, updateInvoiceBatchItem, deleteInvoiceBatchItem,
+        invoiceBatchItems, allInvoiceBatchItems, loadBatchItems, addInvoiceBatchItem, updateInvoiceBatchItem, deleteInvoiceBatchItem,
         exchangeRates } = useAppContext();
 
     // Permissions
@@ -37,6 +37,7 @@ const InvoiceBatchesPage: React.FC = () => {
     const emptyBatchForm = {
         name: '', rangeFrom: 0, rangeTo: 0, totalBooklets: 4000,
         totalAmountPrint: 0, totalAmountStamp: 0, totalAmountTransport: 0,
+        bookletPrice: 0,
         issueDate: new Date().toISOString().split('T')[0],
         notes: '',
         accountNumber: ''
@@ -60,7 +61,8 @@ const InvoiceBatchesPage: React.FC = () => {
     const computedTotal = batchForm.totalAmountPrint + batchForm.totalAmountStamp + batchForm.totalAmountTransport;
 
     // Booklet price
-    const bookletPrice = selectedBatch ? (selectedBatch.totalAmount / (selectedBatch.totalBooklets || 4000)) : 0;
+    const bookletPrice = selectedBatch ? (selectedBatch.bookletPrice || (selectedBatch.totalAmount / (selectedBatch.totalBooklets || 4000))) : 0;
+
 
     // Item booklet count
     const itemBookletCount = itemForm.rangeTo > 0 && itemForm.rangeFrom > 0
@@ -117,6 +119,7 @@ const InvoiceBatchesPage: React.FC = () => {
                 totalBooklets: batch.totalBooklets || 4000,
                 totalAmountPrint: batch.totalAmountPrint || 0, totalAmountStamp: batch.totalAmountStamp || 0,
                 totalAmountTransport: batch.totalAmountTransport || 0,
+                bookletPrice: batch.bookletPrice || 0,
                 issueDate: batch.issueDate?.split('T')[0] || '',
                 notes: batch.notes || '',
                 accountNumber: batch.accountNumber || ''
@@ -139,6 +142,7 @@ const InvoiceBatchesPage: React.FC = () => {
                 totalBooklets: batchForm.totalBooklets || 4000,
                 totalAmountPrint: batchForm.totalAmountPrint, totalAmountStamp: batchForm.totalAmountStamp,
                 totalAmountTransport: batchForm.totalAmountTransport, totalAmount: total,
+                bookletPrice: batchForm.bookletPrice || 0,
                 issueDate: batchForm.issueDate,
                 notes: batchForm.notes || '',
                 accountNumber: batchForm.accountNumber || '',
@@ -146,6 +150,30 @@ const InvoiceBatchesPage: React.FC = () => {
             if (editingBatchId) {
                 await updateInvoiceBatch(editingBatchId, data);
                 if (selectedBatch?.id === editingBatchId) setSelectedBatch({ ...selectedBatch!, ...data, id: editingBatchId });
+                
+                // Cascade update for all unposted items in this batch
+                const itemsToUpdate = allInvoiceBatchItems.filter(i => i.batchId === editingBatchId && !i.isPosted);
+                for (const item of itemsToUpdate) {
+                    const itemBranch = branches.find(b => b.id === item.branchId);
+                    const isNew = itemBranch?.currencyType === 'new_rial';
+                    const amountOld = item.bookletCount * (data.bookletPrice || 0);
+                    const amountNew = (isNew && item.exchangeRateOld > 0) ? amountOld * (item.exchangeRateNew / item.exchangeRateOld) : null;
+                    
+                    const formattedDate = item.disbursementDate ? item.disbursementDate.split('T')[0].replace(/-/g, '/') : '';
+                    const shortDesc = `لكم صرف فواتير من ${item.rangeFrom} الى ${item.rangeTo} بتاريخ ${formattedDate}`;
+                    const longDesc = `مقابل قيمة دفاتر فواتير توصيل عدد ${item.bookletCount} لفرع صنعاء على فرع ${item.branchName} بتاريخ ${formattedDate} (${item.branchName}) لكم صرف فواتير من ${item.rangeFrom} الى ${item.rangeTo}بتاريخ${formattedDate}`;
+
+                    await updateInvoiceBatchItem(item.id, { 
+                        bookletPrice: data.bookletPrice || 0, 
+                        amountOld, 
+                        amountNew: amountNew,
+                        disbursementDescription: shortDesc,
+                        exchangeRateDescription: longDesc
+                    });
+                }
+                
+                if (selectedBatch?.id === editingBatchId) loadBatchItems(editingBatchId);
+                
                 addLog('تعديل دفعة فواتير', `الدفعة: ${data.name}`, 'general');
             } else {
                 await addInvoiceBatch(data);
@@ -205,13 +233,15 @@ const InvoiceBatchesPage: React.FC = () => {
             const isNew = branchData?.currencyType === 'new_rial';
             const amountOld = itemBookletCount * bookletPrice;
             const amountNew = (isNew && exRateOld > 0) ? amountOld * (exRateNew / exRateOld) : null;
-            const desc = `لكم صرف فواتير من ${itemForm.rangeFrom} الى ${itemForm.rangeTo} بتاريخ ${itemForm.disbursementDate.replace(/-/g, '/')}`;
+            const formattedDate = itemForm.disbursementDate.replace(/-/g, '/');
+            const shortDesc = `لكم صرف فواتير من ${itemForm.rangeFrom} الى ${itemForm.rangeTo} بتاريخ ${formattedDate}`;
+            const longDesc = `مقابل قيمة دفاتر فواتير توصيل عدد ${itemBookletCount} لفرع صنعاء على فرع ${itemForm.branchName} بتاريخ ${formattedDate} (${itemForm.branchName}) لكم صرف فواتير من ${itemForm.rangeFrom} الى ${itemForm.rangeTo}بتاريخ${formattedDate}`;
 
             const data: any = {
                 batchId: selectedBatch.id, branchId: itemForm.branchId, branchName: itemForm.branchName,
                 rangeFrom: itemForm.rangeFrom, rangeTo: itemForm.rangeTo, bookletCount: itemBookletCount,
                 bookletPrice, amountOld, amountNew, exchangeRateOld: exRateOld, exchangeRateNew: exRateNew,
-                disbursementDescription: desc, exchangeRateDescription: '', disbursementDate: itemForm.disbursementDate, isPosted: false,
+                disbursementDescription: shortDesc, exchangeRateDescription: longDesc, disbursementDate: itemForm.disbursementDate, isPosted: false,
             };
             // Keep entryNumber/contraEntryNumber if editing
             if (editingItemId) {
@@ -239,6 +269,44 @@ const InvoiceBatchesPage: React.FC = () => {
             await deleteInvoiceBatchItem(item.id);
             addLog('حذف صرف دفاتر', `فرع: ${item.branchName}`, 'general');
         } catch (err) { console.error(err); }
+    };
+
+    const handleUpdateUnpostedItems = async () => {
+        if (!selectedBatch) return;
+        const unpostedItems = allInvoiceBatchItems.filter(i => i.batchId === selectedBatch.id && !i.isPosted);
+        if (unpostedItems.length === 0) {
+            alert('لا توجد صرفيات غير مرحلة لتحديثها.');
+            return;
+        }
+        setSavingBatch(true);
+        try {
+            let count = 0;
+            for (const item of unpostedItems) {
+                const itemBranch = branches.find(b => b.id === item.branchId);
+                const isNew = itemBranch?.currencyType === 'new_rial';
+                const amountOld = item.bookletCount * (selectedBatch.bookletPrice || 0);
+                const amountNew = (isNew && item.exchangeRateOld > 0) ? amountOld * (item.exchangeRateNew / item.exchangeRateOld) : null;
+                
+                const formattedDate = item.disbursementDate ? item.disbursementDate.split('T')[0].replace(/-/g, '/') : '';
+                const shortDesc = `لكم صرف فواتير من ${item.rangeFrom} الى ${item.rangeTo} بتاريخ ${formattedDate}`;
+                const longDesc = `مقابل قيمة دفاتر فواتير توصيل عدد ${item.bookletCount} لفرع صنعاء على فرع ${item.branchName} بتاريخ ${formattedDate} (${item.branchName}) لكم صرف فواتير من ${item.rangeFrom} الى ${item.rangeTo}بتاريخ${formattedDate}`;
+
+                await updateInvoiceBatchItem(item.id, { 
+                    bookletPrice: selectedBatch.bookletPrice || 0, 
+                    amountOld, 
+                    amountNew: amountNew,
+                    disbursementDescription: shortDesc,
+                    exchangeRateDescription: longDesc
+                });
+                count++;
+            }
+            loadBatchItems(selectedBatch.id);
+            alert(`تم تحديث ${count} صرفية بنجاح لتشمل السعر الجديد والبيان المعتمد.`);
+        } catch (err: any) {
+            console.error(err);
+            alert('حدث خطأ أثناء التحديث');
+        }
+        setSavingBatch(false);
     };
 
     // ============ RENDER ============
@@ -276,6 +344,12 @@ const InvoiceBatchesPage: React.FC = () => {
                                 className="px-6 py-3 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-2xl font-black hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm hover:shadow-md flex items-center gap-2 group">
                                 <span className="material-symbols-outlined group-hover:-translate-x-1 transition-transform">arrow_forward</span>العودة للدفعات
                             </button>
+                            {canEditItem && (
+                                <button onClick={handleUpdateUnpostedItems} disabled={savingBatch}
+                                    className="px-6 py-3 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800 rounded-2xl font-black hover:bg-orange-200 dark:hover:bg-orange-900/60 transition-all flex items-center gap-2">
+                                    <span className={`material-symbols-outlined ${savingBatch ? 'animate-spin' : ''}`}>sync</span> تحديث الصرفيات القديمة
+                                </button>
+                            )}
                             {canViewEntries && (
                                 <button onClick={() => navigate(`/invoice-batches/${selectedBatch.id}/entries`)}
                                     className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-2xl font-black shadow-lg shadow-purple-500/30 transition-all flex items-center gap-2 hover:-translate-y-0.5">
@@ -653,6 +727,12 @@ const InvoiceBatchesPage: React.FC = () => {
                             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-4 flex items-center justify-between">
                                 <span className="font-black text-blue-700 dark:text-blue-300">المبلغ الإجمالي (محسوب)</span>
                                 <span className="font-mono font-black text-2xl text-blue-600 dark:text-blue-400">{computedTotal?.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-black text-slate-500 mr-2">سعر الدفتر الواحد (اختياري)</label>
+                                <input type="number" step="any" value={batchForm.bookletPrice || ''} onChange={(e) => setBatchForm({ ...batchForm, bookletPrice: parseFloat(e.target.value) || 0 })}
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-2xl py-4 px-6 font-mono font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="اتركه فارغاً ليتم حسابه تلقائياً من الإجمالي" />
+                                <p className="text-xs text-slate-400 font-bold pr-2">سيتم احتساب قيمة الدفاتر للفرع بناءً على هذا السعر، وإلا سيتم احتسابه كمتوسط (الإجمالي ÷ عدد الدفاتر الكلي).</p>
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-black text-slate-500 mr-2">ملاحظات</label>

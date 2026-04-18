@@ -12,6 +12,11 @@ export const restaurantService = {
         return 'old_riyal';
     },
 
+    getFilteredRestaurants: async (filters: any = {}): Promise<Restaurant[]> => {
+        const snap = await getDocs(collection(db, ROOT_COLLECTION, DATA_PATH, 'restaurants'));
+        return snap.docs.map(d => d.data() as Restaurant);
+    },
+
     addRestaurant: async (restaurant: Restaurant) => {
         await setDoc(doc(db, ROOT_COLLECTION, DATA_PATH, 'restaurants', restaurant.id), restaurant);
     },

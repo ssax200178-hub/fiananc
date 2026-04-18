@@ -64,6 +64,46 @@ export const useUsers = (persistState: any, addLog: any) => {
         }
     };
 
+    const register = async (username: string, password: string, name: string) => {
+        setIsAuthLoading(true);
+        try {
+            const { uid, email } = await userService.createUserInFirebase(username, password);
+
+            const existing = users.find(u => u.username.toLowerCase() === username.toLowerCase() || u.email?.toLowerCase() === email.toLowerCase());
+            if (existing) {
+                throw new Error(`اسم المستخدم أو البريد الإلكتروني مستخدم بالفعل: ${email}`);
+            }
+
+            const newUser: User = {
+                id: generateId(),
+                username: username.trim().toLowerCase(),
+                name,
+                role: 'user', // Default Role
+                isActive: false, // Pending Approval
+                email,
+                firebaseUid: uid,
+                permissions: [] // No permissions until approved
+            };
+
+            const updatedUsers = [...users, newUser];
+            setUsers(updatedUsers);
+
+            await persistState({ users: updatedUsers });
+            await userService.syncUserRole(uid, 'user', [], false, email);
+
+            addLog('طلب انضمام', `قام الموظف ${name} بإنشاء حساب جديد (بانتظار التفويض)`, 'users');
+        } catch (error: any) {
+            console.error("Error registering user:", error);
+            let errorMsg = error.message;
+            if (error.code === 'auth/email-already-in-use') {
+                errorMsg = "البريد الإلكتروني مستخدم مسبقاً في النظام.";
+            }
+            throw new Error(`❌ فشل إنشاء الحساب: ${errorMsg}`);
+        } finally {
+            setIsAuthLoading(false);
+        }
+    };
+
     const addUser = async (username: string, password: string, name: string, role: UserRole, permissions?: UserPermission[]) => {
         setIsAuthLoading(true);
         try {
@@ -167,7 +207,7 @@ export const useUsers = (persistState: any, addLog: any) => {
         addLog('تغيير حالة مستخدم', `تم ${newStatus ? 'تنشيط' : 'تعطيل'} المستخدم: ${userToToggle.name}`, 'settings');
     };
 
-    const updateUser = async (id: string, updates: { username?: string; name?: string; password?: string; permissions?: UserPermission[]; role?: UserRole; firebaseUid?: string; isActive?: boolean; email?: string }): Promise<boolean> => {
+    const updateUser = async (id: string, updates: { username?: string; name?: string; password?: string; permissions?: UserPermission[]; role?: UserRole; firebaseUid?: string; isActive?: boolean; email?: string; allowedMainAccounts?: string[] }): Promise<boolean> => {
         if (updates.password) {
             alert("تنبيه: تغيير كلمة المرور هنا لا يؤثر على حساب الدخول في هذه النسخة.");
         }
@@ -194,6 +234,7 @@ export const useUsers = (persistState: any, addLog: any) => {
                         ...(updates.firebaseUid && { firebaseUid: updates.firebaseUid }),
                         ...(updates.isActive !== undefined && { isActive: updates.isActive }),
                         ...(updates.email && { email: updates.email }),
+                        ...(updates.allowedMainAccounts && { allowedMainAccounts: updates.allowedMainAccounts }),
                     };
                     return targetUser;
                 }
@@ -224,6 +265,6 @@ export const useUsers = (persistState: any, addLog: any) => {
 
     return {
         users, setUsers, currentUser, setCurrentUser, isAuthLoading,
-        login, logout, changePassword, addUser, deleteUser, toggleUserStatus, updateUser
+        login, register, logout, changePassword, addUser, deleteUser, toggleUserStatus, updateUser
     };
 };

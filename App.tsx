@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 
 import InputPage from './components/InputPage';
 import AnalysisPage from './components/AnalysisPage';
 import VarianceResolutionPage from './components/VarianceResolutionPage';
 import FundsPage from './components/FundsPage';
 import Layout from './components/Layout';
+import PremiumLayout from './components/PremiumLayout';
 import SettingsPage from './components/SettingsPage';
 import LoginPage from './components/LoginPage';
 import DashboardPage from './components/DashboardPage';
@@ -27,6 +28,8 @@ import RestaurantPaymentHistoryPage from './components/RestaurantPaymentHistoryP
 import WalletLiquidityPage from './components/WalletLiquidityPage';
 import DeveloperFeedbackPage from './components/DeveloperFeedbackPage';
 import InvoiceDisbursementPage from './components/InvoiceDisbursementPage';
+import InvoiceBooksPage from './components/InvoiceBooksPage';
+import RestaurantStatementsPage from './components/RestaurantStatementsPage';
 import BatchEntriesPage from './components/BatchEntriesPage';
 import PhonePaymentsPage from './components/PhonePaymentsPage';
 import DeductionsPage from './components/DeductionsPage';
@@ -36,6 +39,10 @@ import SumDisbursementPage from './components/SumDisbursementPage';
 import BankAccountsPage from './components/BankAccountsPage';
 import ChartOfAccountsPage from './components/ChartOfAccountsPage';
 import JournalEntryPage from './components/JournalEntryPage';
+import ScrapePreviewPage from './components/ScrapePreviewPage';
+import TawseelSessionPage from './components/scraping/TawseelSessionPage';
+import ScrapingHubPage from './components/scraping/ScrapingHubPage';
+import ScrapedDataViewer from './components/scraping/ScrapedDataViewer';
 import ErrorBoundary from './components/ErrorBoundary';
 
 import { AppContext } from './AppContext';
@@ -53,43 +60,34 @@ const ScrollToTop = () => {
   return null;
 };
 
-// Official Colors
-const officialColors = {
-  header: '#C62828',
-  sidebar: '#263238',
-  active: '#FFB300',
-  link: '#4FC3F7',
-  background: '#F5F5F5',
-  success: '#4CAF50'
-};
-
 const App: React.FC = () => {
   const navigate = useNavigate();
   const appData = useAppData(navigate);
   const [showRetry, setShowRetry] = useState(false);
+  const [premiumUI, setPremiumUI] = useState(() => localStorage.getItem('premium_ui_enabled') === 'true');
 
-  // Apply color scheme (official)
-  const applyColorScheme = (colors: any) => {
-    const root = document.documentElement;
-    root.style.setProperty('--color-sidebar', colors.sidebar);
-    root.style.setProperty('--color-header', colors.header);
-    root.style.setProperty('--color-active', colors.active);
-    root.style.setProperty('--color-link', colors.link);
-    // root.style.setProperty('--color-bg-light', colors.background);
-    root.style.setProperty('--color-success', colors.success);
-
-    // Also set old names for backward compatibility if any components still use them
-    root.style.setProperty('--sidebar-bg', colors.sidebar);
-    root.style.setProperty('--header-bg', colors.header);
-    root.style.setProperty('--accent-color', colors.active);
-    root.style.setProperty('--link-color', colors.link);
-    // root.style.setProperty('--bg-light', colors.background);
-    root.style.setProperty('--success-color', colors.success);
+  const togglePremiumUI = () => {
+    setPremiumUI(prev => {
+      const newVal = !prev;
+      localStorage.setItem('premium_ui_enabled', String(newVal));
+      return newVal;
+    });
   };
 
+  // Cleaned up hardcoded color logic. Now handled by src/styles/colors.css
+  
   useEffect(() => {
-    applyColorScheme(officialColors);
-  }, []);
+    const root = document.documentElement;
+    // Apply branch specific class for color variables
+    if (appData.currentUser?.branch) {
+      // Remove any existing branch classes
+      const branchClasses = ['branch-sanaa', 'branch-aden', 'branch-ibb', 'branch-dhamar', 'branch-taiz-hoban', 'branch-taiz-city', 'branch-mukalla', 'branch-hod'];
+      root.classList.remove(...branchClasses);
+      
+      const branchClass = `branch-${appData.currentUser.branch.toLowerCase().replace(/ /g, '-')}`;
+      root.classList.add(branchClass);
+    }
+  }, [appData.currentUser?.branch]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -149,10 +147,12 @@ const App: React.FC = () => {
   // Add colors to appData to satisfy AppContextType
   const fullAppContext = {
     ...appData,
+    premiumUI,
+    togglePremiumUI,
     colors: {
-      positive: '#d97706', // amber-600
-      negative: '#dc2626', // red-600
-      matched: '#10b981'   // emerald-500
+      positive: 'var(--color-positive)', 
+      negative: 'var(--color-negative)', 
+      matched: 'var(--color-matched)'
     }
   };
 
@@ -165,7 +165,7 @@ const App: React.FC = () => {
             <Route path="/login" element={!(currentUser?.id) ? <LoginPage /> : <Navigate to="/" />} />
 
             {/* Protected Routes with Sidebar Layout */}
-            <Route path="/" element={(currentUser?.id) ? <Layout /> : <Navigate to="/login" />}>
+            <Route path="/" element={(currentUser?.id) ? (fullAppContext.premiumUI ? <PremiumLayout /> : <Layout />) : <Navigate to="/login" />}>
               <Route index element={<DashboardPage />} />
 
               <Route path="input" element={
@@ -292,6 +292,21 @@ const App: React.FC = () => {
                 (currentUser?.role === 'super_admin' || currentUser?.permissions?.includes('journal_entries_manage')) ? <JournalEntryPage /> : <Navigate to="/" />
               } />
 
+              <Route path="scrape-preview" element={
+                (currentUser?.role === 'super_admin' || currentUser?.permissions?.includes('automation_manage')) ? <ScrapePreviewPage /> : <Navigate to="/" />
+              } />
+
+              {/* نظام السحب */}
+              <Route path="scraping/session" element={
+                (currentUser?.role === 'super_admin' || currentUser?.permissions?.includes('automation_manage')) ? <TawseelSessionPage /> : <Navigate to="/" />
+              } />
+              <Route path="scraping/hub" element={
+                (currentUser?.role === 'super_admin' || currentUser?.permissions?.includes('automation_manage')) ? <ScrapingHubPage /> : <Navigate to="/" />
+              } />
+              <Route path="scraping/viewer" element={
+                (currentUser?.role === 'super_admin' || currentUser?.permissions?.includes('automation_manage')) ? <ScrapedDataViewer /> : <Navigate to="/" />
+              } />
+
               <Route path="permissions-matrix" element={
                 (currentUser?.role === 'super_admin' || currentUser?.permissions?.includes('users_permissions')) ? (
                   <React.Suspense fallback={<div>جاري التحميل...</div>}>
@@ -302,6 +317,10 @@ const App: React.FC = () => {
                   </React.Suspense>
                 ) : <Navigate to="/" />
               } />
+
+              <Route path="/invoices/disbursement" element={<InvoiceDisbursementPage />} />
+              <Route path="/invoices/books" element={<InvoiceBooksPage />} />
+              <Route path="/accounting/statements" element={<RestaurantStatementsPage />} />
 
               <Route path="settings" element={<SettingsPage />} />
             </Route>

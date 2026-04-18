@@ -25,11 +25,73 @@ const emptyLine = (): EntryLine => ({
     id: genId(), accountNumber: '', subAccountNumber: '', amount: 0, description: '',
 });
 
-const ObjectComponent = () => { };
+interface SearchableAccountProps {
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+    accounts: any[];
+    placeholder?: string;
+}
+
+const SearchableAccount = React.memo(({ label, value, onChange, accounts, placeholder }: SearchableAccountProps) => {
+    const [search, setSearch] = useState('');
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const filtered = useMemo(() => {
+        if (!search.trim()) return accounts.slice(0, 50);
+        const s = search.trim().toLowerCase();
+        return accounts.filter((a: any) => (a.accountNumber || '').includes(s) || (a.accountName || '').toLowerCase().includes(s)).slice(0, 50);
+    }, [accounts, search]);
+
+    const selectedAccount = useMemo(() => accounts.find((a: any) => a.accountNumber === value), [accounts, value]);
+    const displayText = selectedAccount ? `${selectedAccount.accountNumber} - ${selectedAccount.accountName}` : (value || '');
+
+    return (
+        <div ref={ref} className="relative">
+            {label && <label className="block text-xs font-black text-slate-600 dark:text-slate-400 mb-1">{label}</label>}
+            <div className="relative">
+                <input
+                    value={open ? search : displayText}
+                    onChange={e => { setSearch(e.target.value); if (!open) setOpen(true); }}
+                    onFocus={() => { setOpen(true); setSearch(''); }}
+                    placeholder={placeholder || 'ابحث بالرقم أو الاسم...'}
+                    className="w-full bg-white/50 dark:bg-slate-800/50 backdrop-blur-md border border-slate-200/60 dark:border-slate-700/50 rounded-xl py-2.5 px-3 pl-10 font-bold outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 hover:bg-white/80 dark:hover:bg-slate-800/80 transition-all text-slate-900 dark:text-white text-sm shadow-inner"
+                />
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">search</span>
+                {value && (
+                    <button onClick={(e) => { e.stopPropagation(); onChange(''); setSearch(''); }} className="absolute right-10 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors">
+                        <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
+                )}
+            </div>
+            {open && (
+                <div className="absolute z-50 mt-2 w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 rounded-2xl shadow-2xl max-h-60 overflow-y-auto overflow-x-hidden animate-fade-in divide-y divide-slate-100/50 dark:divide-slate-800/50">
+                    {filtered.length === 0 ? (
+                        <p className="px-4 py-4 text-sm text-slate-400 font-bold text-center">لا توجد نتائج</p>
+                    ) : filtered.map((a: any) => (
+                        <button key={a.id || a.accountNumber} onClick={() => { onChange(a.accountNumber); setOpen(false); setSearch(''); }}
+                            className={`w-full text-right px-4 py-3 text-sm font-bold hover:bg-violet-50/80 dark:hover:bg-violet-500/10 transition-colors flex items-center gap-3 group/item ${value === a.accountNumber ? 'bg-violet-50/80 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300' : 'text-slate-700 dark:text-slate-200'}`}>
+                            <span className={`font-mono text-xs min-w-[50px] transition-colors ${value === a.accountNumber ? 'text-violet-600 dark:text-violet-400' : 'text-blue-500 group-hover/item:text-violet-500'}`}>{a.accountNumber}</span>
+                            <span className="truncate group-hover/item:-translate-x-1 transition-transform">{a.accountName}</span>
+                            {a.branch && <span className="mr-auto text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-200/50 dark:border-slate-700/50">{a.branch}</span>}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+});
 
 const JournalEntryPage: React.FC = () => {
     const ctx = useAppContext() as any;
-    const { currentUser, addLog, restaurants, paymentAccounts } = ctx;
+    const { currentUser, addLog, restaurants, paymentAccounts, branches, customCurrencies = [] } = ctx;
     const chartAccounts = ctx.chartAccounts || [];
     const journalEntries = ctx.journalEntries || [];
     const addJournalEntry = ctx.addJournalEntry;
@@ -59,12 +121,10 @@ const JournalEntryPage: React.FC = () => {
                 }
                 if (sysAccNum) {
                     const foundAcc = chartAccounts.find((a: any) => a.accountNumber === sysAccNum);
-                    if (foundAcc) {
-                        return {
-                            m: foundAcc.accountType === 'sub' ? (foundAcc.parentAccountNumber || '') : foundAcc.accountNumber,
-                            s: foundAcc.accountType === 'sub' ? foundAcc.accountNumber : ''
-                        };
-                    }
+                    return {
+                        m: '',
+                        s: foundAcc && foundAcc.accountType === 'sub' ? foundAcc.accountNumber : sysAccNum
+                    };
                 }
             }
         }
@@ -96,8 +156,8 @@ const JournalEntryPage: React.FC = () => {
                     const foundAcc = chartAccounts.find((a: any) => a.accountNumber === sysAccNum);
                     if (foundAcc) {
                         return {
-                            m: foundAcc.accountType === 'sub' ? (foundAcc.parentAccountNumber || '') : foundAcc.accountNumber,
-                            s: foundAcc.accountType === 'sub' ? foundAcc.accountNumber : ''
+                            m: '',
+                            s: foundAcc.accountType === 'sub' ? foundAcc.accountNumber : foundAcc.accountNumber
                         };
                     }
                 }
@@ -105,11 +165,11 @@ const JournalEntryPage: React.FC = () => {
                 // 2. Fallback to exact and then fuzzy string matching for retroactive support
                 // We check if the chart account name equals the primary type, or includes it
                 const exactSub = chartAccounts.find((a: any) => a.accountType === 'sub' && a.accountName === primary.type);
-                if (exactSub) return { m: exactSub.parentAccountNumber || '', s: exactSub.accountNumber };
+                if (exactSub) return { m: '', s: exactSub.accountNumber };
 
                 const matchedSub = chartAccounts.find((a: any) => a.accountType === 'sub' && (a.accountName.includes(primary.type) || primary.type.includes(a.accountName)));
                 if (matchedSub) {
-                    return { m: matchedSub.parentAccountNumber || '', s: matchedSub.accountNumber };
+                    return { m: '', s: matchedSub.accountNumber };
                 }
             }
         }
@@ -123,7 +183,7 @@ const JournalEntryPage: React.FC = () => {
     const [entrySubType, setEntrySubType] = useState<EntrySubType>('restaurant');
     const [inputMethod, setInputMethod] = useState<InputMethod>('manual');
     const [title, setTitle] = useState('');
-    const [currencyId, setCurrencyId] = useState(7);
+    const [currencyId, setCurrencyId] = useState(() => customCurrencies.find((c: any) => c.isDefault)?.currencyId || customCurrencies.find((c: any) => c.isActive)?.currencyId || 7);
     const [costCenter, setCostCenter] = useState('');
     const [reference, setReference] = useState('');
     const [description, setDescription] = useState('');
@@ -139,7 +199,11 @@ const JournalEntryPage: React.FC = () => {
 
     // Compound
     const [compoundDirection, setCompoundDirection] = useState<CompoundDirection>('multi-debit');
-    const [compoundMultiLines, setCompoundMultiLines] = useState<EntryLine[]>([emptyLine()]);
+    const [compoundMultiLines, setCompoundMultiLines] = useState<any[]>([]);
+    
+    // Paste Processing state
+    const [isProcessingPaste, setIsProcessingPaste] = useState(false);
+    const [pasteProgress, setPasteProgress] = useState(0);
     const [compoundSingleAcc, setCompoundSingleAcc] = useState('');
     const [compoundSingleSub, setCompoundSingleSub] = useState('');
     const [compoundSingleDescription, setCompoundSingleDescription] = useState('');
@@ -173,7 +237,35 @@ const JournalEntryPage: React.FC = () => {
     const getAccountName = useCallback((num: string) => chartAccounts.find((a: any) => a.accountNumber === num)?.accountName || '', [chartAccounts]);
     const getAccountBranch = useCallback((num: string) => chartAccounts.find((a: any) => a.accountNumber === num)?.branch || '', [chartAccounts]);
 
+    // الحسابات البنكية/السداد فقط - مستخرجة من paymentAccounts المربوطة بدليل الحسابات
+    const bankAccounts = useMemo(() => {
+        if (!paymentAccounts || paymentAccounts.length === 0) return [];
+        const mainPaAccounts = paymentAccounts.filter((pa: any) => pa.isMain && pa.systemAccountNumber);
+        const bankChartAccounts: any[] = [];
+        mainPaAccounts.forEach((pa: any) => {
+            const chartAcc = chartAccounts.find((a: any) => a.accountNumber === pa.systemAccountNumber);
+            if (chartAcc) bankChartAccounts.push(chartAcc);
+        });
+        const subPaAccounts = paymentAccounts.filter((pa: any) => !pa.isMain && pa.systemAccountNumber);
+        subPaAccounts.forEach((pa: any) => {
+            const chartAcc = chartAccounts.find((a: any) => a.accountNumber === pa.systemAccountNumber);
+            if (chartAcc && !bankChartAccounts.find((b: any) => b.accountNumber === chartAcc.accountNumber)) {
+                bankChartAccounts.push(chartAcc);
+            }
+        });
+        return bankChartAccounts;
+    }, [paymentAccounts, chartAccounts]);
+
     // --- Parse Data Helpers ---
+    const getCurrencyIdFromBranch = useCallback((branchName: string) => {
+        if (!branchName) return undefined;
+        const branch = (branches || []).find((b: any) => b.name === branchName);
+        if (!branch) return undefined;
+        if (branch.currencyType === 'old_rial') return 8;
+        if (branch.currencyType === 'invoice_book' || branch.currencyType === 'SAR') return 12; // 12 is for invoice book process
+        return 7; // new_rial default
+    }, [branches]);
+
     const applyParsedData = (parsed: any[]) => {
         if (mode === 'compound') {
             setCompoundMultiLines(parsed.map(p => ({
@@ -182,7 +274,7 @@ const JournalEntryPage: React.FC = () => {
                 subAccountNumber: p.subAccountNumber,
                 amount: p.amount,
                 description: p.description || '',
-                currencyId: p.currencyId ?? undefined,
+                currencyId: p.currencyId ?? getCurrencyIdFromBranch(p.branch) ?? undefined,
                 costCenter: p.costCenter || '',
                 reference: p.reference || '',
             })));
@@ -196,7 +288,7 @@ const JournalEntryPage: React.FC = () => {
                     branch: p.branch || '',
                     description: p.description || '',
                     restaurantName: p.restaurantName || '',
-                    currencyId: p.currencyId ?? undefined,
+                    currencyId: p.currencyId ?? getCurrencyIdFromBranch(p.branch) ?? undefined,
                     costCenter: p.costCenter || '',
                     reference: p.reference || '',
                     creditAccountNumber: autoAcc.m,
@@ -222,7 +314,8 @@ const JournalEntryPage: React.FC = () => {
             const uniqueUnknowns = new Map<string, any>();
 
             parsed.forEach(p => {
-                const foundSub = chartAccounts.find((a: any) => a.accountType === 'sub' && a.accountNumber === p.subAccountNumber);
+                // Must ensure the matched sub-account actually belongs to the Restaurant main account!
+                const foundSub = chartAccounts.find((a: any) => a.accountType === 'sub' && a.accountNumber === p.subAccountNumber && a.parentAccountNumber === batchRestaurantMainAccount);
                 if (foundSub) {
                     p.branch = p.branch || foundSub.branch || '';
                 } else {
@@ -314,39 +407,106 @@ const JournalEntryPage: React.FC = () => {
     };
 
     // --- Parse Paste Data ---
-    const handlePasteApply = () => {
+    const handlePasteApply = async () => {
         const lines = pasteText.trim().split('\n').map(l => l.trim()).filter(Boolean);
         if (lines.length === 0) return alert('لا توجد بيانات');
 
-        const parsed = lines.map(l => {
-            const parts = l.split(/[\t]/).map(p => p.trim());
-            if (entrySubType === 'restaurant') {
-                // Format: رقم الحساب تحليلي \t المبلغ \t اسم المطعم \t البيان \t الفرع
-                return {
-                    accountNumber: batchRestaurantMainAccount,
-                    subAccountNumber: parts[0] || '',
-                    amount: parseNumber(parts[1]) || 0,
-                    restaurantName: parts[2] || '',
-                    description: parts[3] || '',
-                    branch: parts[4] || '',
-                };
-            } else {
-                // Format: الحساب الرئيسي \t الحساب التحليلي \t المبلغ \t العملة \t البيان \t مركز التكلفة \t الرقم المرجعي
-                return {
-                    accountNumber: parts[0] || '',
-                    subAccountNumber: parts[1] || '',
-                    amount: parseNumber(parts[2]) || 0,
-                    currencyId: parseInt(parts[3]) || undefined,
-                    description: parts[4] || '',
-                    costCenter: parts[5] || '',
-                    reference: parts[6] || '',
-                    restaurantName: '',
-                    branch: '',
-                };
-            }
-        }).filter(p => p.accountNumber || p.subAccountNumber);
+        setIsProcessingPaste(true);
+        setPasteProgress(0);
 
-        processParsedTokens(parsed);
+        const parsed: any[] = [];
+        const chunkSize = 200;
+
+        for (let i = 0; i < lines.length; i += chunkSize) {
+            await new Promise(res => setTimeout(res, 5));
+            const chunk = lines.slice(i, i + chunkSize);
+
+            for (const line of chunk) {
+                const parts = line.split(/[\t]/).map(p => p.trim());
+                if (entrySubType === 'restaurant') {
+                    // Format: الحساب التحليلي \t المبلغ \t اسم المطعم \t البيان \t المسدد/جهة الدفع
+                    // Check format dynamically based on columns
+                    let rawPayer = '';
+                    let tempSubAcc = '';
+                    let tempAmount = 0;
+                    let tempRestName = '';
+                    let tempDesc = '';
+                    let tempBranch = '';
+                    
+                    const isCol0Num = parts[0] && parts[0].match(/^\\d+$/);
+                    const isCol1Amount = !isNaN(parseNumber(parts[1]));
+
+                    if (parts.length >= 6 && isCol0Num && isCol1Amount) {
+                        // 6 Columns: Account | Amount | Restaurant | Description | Payer | Branch
+                        tempSubAcc = parts[0] || '';
+                        tempAmount = parseNumber(parts[1]) || 0;
+                        tempRestName = parts[2] || '';
+                        tempDesc = parts[3] || '';
+                        rawPayer = parts[4] || '';
+                        tempBranch = parts[5] || '';
+                    } else if (!isNaN(parseNumber(parts[3])) && parts[4] && parts[4].match(/^\\d+$/)) {
+                        // Alt new format: Branch | Payer | Restaurant | Amount | Analytical
+                        tempBranch = parts[0] || '';
+                        rawPayer = parts[1] || '';
+                        tempRestName = parts[2] || '';
+                        tempAmount = parseNumber(parts[3]) || 0;
+                        tempSubAcc = parts[4] || '';
+                    } else {
+                        // Old 5-column format: الحساب التحليلي \\t المبلغ \\t اسم المطعم \\t البيان \\t المسدد/جهة الدفع
+                        tempSubAcc = parts[0] || '';
+                        tempAmount = parseNumber(parts[1]) || 0;
+                        tempRestName = parts[2] || '';
+                        tempDesc = parts[3] || '';
+                        rawPayer = parts[4] || '';
+                    }
+
+                    let creditS = '';
+                    const matchedBranch = (branches || []).find((b: any) => tempBranch && (b.name === tempBranch || b.id === tempBranch));
+                    
+                    if (rawPayer) {
+                        const detect = autoDetectCreditAccount('', '', rawPayer);
+                        if (detect.s) creditS = detect.s;
+                    }
+                    if (!creditS) {
+                        const detect = autoDetectCreditAccount(tempRestName, tempSubAcc, rawPayer || tempDesc);
+                        if (detect.s) creditS = detect.s;
+                    }
+                    if (!creditS && matchedBranch && matchedBranch.creditSubAccountNumber) {
+                        creditS = matchedBranch.creditSubAccountNumber;
+                    }
+
+                    parsed.push({
+                        accountNumber: batchRestaurantMainAccount,
+                        subAccountNumber: tempSubAcc,
+                        amount: tempAmount,
+                        restaurantName: tempRestName,
+                        description: tempDesc,
+                        branch: matchedBranch ? matchedBranch.name : (tempBranch || getAccountBranch(tempSubAcc)),
+                        creditAccountNumber: '', // Always empty initially
+                        creditSubAccountNumber: creditS
+                    });
+                } else {
+                    parsed.push({
+                        accountNumber: parts[0] || '',
+                        subAccountNumber: parts[1] || '',
+                        amount: parseNumber(parts[2]) || 0,
+                        currencyId: parseInt(parts[3]) || undefined,
+                        description: parts[4] || '',
+                        costCenter: parts[5] || '',
+                        reference: parts[6] || '',
+                        restaurantName: '',
+                        branch: '',
+                    });
+                }
+            }
+            setPasteProgress(Math.min(100, Math.round(((i + chunkSize) / lines.length) * 100)));
+        }
+
+        const filteredParsed = parsed.filter(p => p.accountNumber || p.subAccountNumber);
+        await processParsedTokens(filteredParsed);
+        
+        setIsProcessingPaste(false);
+        setPasteText(''); // auto clear
     };
 
     // --- Handle Excel Upload for entries ---
@@ -362,13 +522,67 @@ const JournalEntryPage: React.FC = () => {
                 const rows = data.slice(1).filter((r: any[]) => r.some(c => c !== undefined && c !== ''));
                 const parsed = rows.map((r: any[]) => {
                     if (entrySubType === 'restaurant') {
+                        let rawPayer = '';
+                        let tempSubAcc = '';
+                        let tempAmount = 0;
+                        let tempRestName = '';
+                        let tempDesc = '';
+                        let tempBranch = '';
+                        const c0 = String(r[0] || '').trim();
+                        const c1 = String(r[1] || '').trim();
+                        const c2 = String(r[2] || '').trim();
+                        const c3 = String(r[3] || '').trim();
+                        const c4 = String(r[4] || '').trim();
+                        const c5 = String(r[5] || '').trim();
+
+                        const isCol0Num = c0 && c0.match(/^\\d+$/);
+                        const isCol1Amount = !isNaN(parseNumber(c1));
+
+                        if (r.length >= 6 && isCol0Num && isCol1Amount) {
+                            tempSubAcc = c0;
+                            tempAmount = parseNumber(c1) || 0;
+                            tempRestName = c2;
+                            tempDesc = c3;
+                            rawPayer = c4;
+                            tempBranch = c5;
+                        } else if (!isNaN(parseNumber(c3)) && c4 && c4.match(/^\\d+$/)) {
+                            tempBranch = c0;
+                            rawPayer = c1;
+                            tempRestName = c2;
+                            tempAmount = parseNumber(c3) || 0;
+                            tempSubAcc = c4;
+                        } else {
+                            tempSubAcc = c0;
+                            tempAmount = parseNumber(c1) || 0;
+                            tempRestName = c2;
+                            tempDesc = c3;
+                            rawPayer = c4;
+                        }
+
+                        let creditS = '';
+                        const matchedBranch = (branches || []).find((b: any) => tempBranch && (b.name === tempBranch || b.id === tempBranch));
+                        
+                        if (rawPayer) {
+                            const detect = autoDetectCreditAccount('', '', rawPayer);
+                            if (detect.s) creditS = detect.s;
+                        }
+                        if (!creditS) {
+                            const detect = autoDetectCreditAccount(tempRestName, tempSubAcc, rawPayer || tempDesc);
+                            if (detect.s) creditS = detect.s;
+                        }
+                        if (!creditS && matchedBranch && matchedBranch.creditSubAccountNumber) {
+                            creditS = matchedBranch.creditSubAccountNumber;
+                        }
+
                         return {
                             accountNumber: batchRestaurantMainAccount,
-                            subAccountNumber: String(r[0] || '').trim(),
-                            amount: parseFloat(r[1]) || 0,
-                            restaurantName: String(r[2] || '').trim(),
-                            description: String(r[3] || '').trim(),
-                            branch: String(r[4] || '').trim(),
+                            subAccountNumber: tempSubAcc,
+                            amount: tempAmount,
+                            restaurantName: tempRestName,
+                            description: tempDesc,
+                            branch: matchedBranch ? matchedBranch.name : (tempBranch || getAccountBranch(tempSubAcc)),
+                            creditAccountNumber: '',
+                            creditSubAccountNumber: creditS
                         };
                     } else {
                         return {
@@ -423,24 +637,32 @@ const JournalEntryPage: React.FC = () => {
             if (validBatch.length === 0) return alert('يرجى إضافة حسابات ومبالغ مدينة');
 
             if (entrySubType === 'restaurant') {
-                if (validBatch.some(d => !d.creditAccountNumber)) return alert('⚠️ خطأ: يوجد مطاعم لم يُحدد لها "المسدد" (الحساب الدائن). يرجى اختيار جهة السداد لكل مطعم مدخل.');
+                if (validBatch.some(d => !d.creditSubAccountNumber)) return alert('⚠️ خطأ: يوجد مطاعم لم يُحدد لها "المسدد" (الحساب الدائن). يرجى اختيار جهة السداد لكل مطعم مدخل.');
             } else {
                 if (validBatch.some(d => !(d.creditAccountNumber || batchCreditAccount))) return alert('يوجد أسطر لم يحدد لها حساب دائن (المسدد)، يرجى تحديدها للأسطر أو وضع حساب دائن ثابت في الأسفل');
             }
 
-            // ترتيب حسب الفرع
-            const withBranch = validBatch.map(d => ({ ...d, branch: d.branch || getAccountBranch(d.subAccountNumber || d.accountNumber) }));
-            withBranch.sort((a, b) => (a.branch || '').localeCompare(b.branch || '', 'ar'));
+            const getBranchCurrencyId = (branchName: string) => {
+                if (!branchName) return null;
+                const branchObj = branches?.find((b: any) => b.name === branchName);
+                if (!branchObj) return null;
+                if (branchObj.currencyId) return branchObj.currencyId;
+                if (branchObj.currencyType === 'old_rial') return 8;
+                if (branchObj.currencyType === 'new_rial') return 7;
+                return null;
+            };
 
-            withBranch.forEach((d, i) => {
+            validBatch.forEach((d, i) => {
                 const num = batchStartNumber + i;
                 const debitDesc = d.description || desc;
                 const creditDesc = d.restaurantName ? `لكم سداد مطعم ${d.restaurantName}` : (batchCreditDescription || d.description || desc);
                 const cMain = d.creditAccountNumber || batchCreditAccount;
                 const cSub = d.creditSubAccountNumber || batchCreditSub;
 
-                lines.push({ entryNumber: num, accountNumber: d.accountNumber, subAccountNumber: d.subAccountNumber, debit: d.amount, credit: 0, currencyId: d.currencyId || currencyId, description: debitDesc, costCenter: d.costCenter || costCenter, reference: d.reference || reference, branch: d.branch });
-                lines.push({ entryNumber: num, accountNumber: cMain, subAccountNumber: cSub, debit: 0, credit: d.amount, currencyId: d.currencyId || currencyId, description: creditDesc, costCenter: d.costCenter || costCenter, reference: d.reference || reference, branch: d.branch });
+                const branchCurrency = getBranchCurrencyId(d.branch) || d.currencyId || currencyId;
+
+                lines.push({ entryNumber: num, accountNumber: d.accountNumber, subAccountNumber: d.subAccountNumber, debit: d.amount, credit: 0, currencyId: branchCurrency, description: debitDesc, costCenter: d.costCenter || costCenter, reference: d.reference || reference, branch: d.branch });
+                lines.push({ entryNumber: num, accountNumber: cMain, subAccountNumber: cSub, debit: 0, credit: d.amount, currencyId: branchCurrency, description: creditDesc, costCenter: d.costCenter || costCenter, reference: d.reference || reference, branch: d.branch });
             });
         }
         setPreviewLines(lines);
@@ -463,10 +685,19 @@ const JournalEntryPage: React.FC = () => {
         return groups;
     }, [previewLines, mode]);
 
+    const getCurrencyNameStr = (cId: any) => {
+        const c = customCurrencies?.find((x:any) => x.currencyId === Number(cId));
+        if (c) return c.name;
+        if (Number(cId) === 7) return 'ريال جديد (7)';
+        if (Number(cId) === 8) return 'ريال قديم (8)';
+        if (Number(cId) === 12) return 'عملية دفتر فواتير (12)';
+        return cId || '';
+    };
+
     const handleCopy = (linesToCopy?: any[]) => {
         const data = linesToCopy || previewLines;
-        const header = ['رقم القيد', 'رقم الحساب', 'رقم الحساب التحليلي', 'مدين', 'دائن', 'رقم العملة', 'البيان', 'مركز التكلفة', 'رقم المرجع'].join('\t');
-        const rows = data.map(l => [l.entryNumber, l.accountNumber, l.subAccountNumber, l.debit || '', l.credit || '', l.currencyId, l.description, l.costCenter, l.reference].join('\t'));
+        const header = ['رقم القيد', 'رقم الحساب', 'رقم الحساب التحليلي', 'مدين', 'دائن', 'العملة', 'البيان', 'مركز التكلفة', 'رقم المرجع'].join('\t');
+        const rows = data.map(l => [l.entryNumber, l.accountNumber, l.subAccountNumber, l.debit || '', l.credit || '', getCurrencyNameStr(l.currencyId), l.description, l.costCenter, l.reference].join('\t'));
         const td = data.reduce((s: number, l: any) => s + (l.debit || 0), 0);
         const tc = data.reduce((s: number, l: any) => s + (l.credit || 0), 0);
         rows.push(['', '', '', td, tc, '', 'الإجمالي', '', ''].join('\t'));
@@ -476,7 +707,7 @@ const JournalEntryPage: React.FC = () => {
 
     const handleExportExcel = () => {
         const headers = ['رقم القيد', 'رقم الحساب', 'الحساب التحليلي', 'اسم الحساب', 'مدين', 'دائن', 'العملة', 'البيان', 'مركز التكلفة', 'المرجع', 'الفرع'];
-        const rows = previewLines.map(l => [l.entryNumber, l.accountNumber, l.subAccountNumber, getAccountName(l.subAccountNumber || l.accountNumber), l.debit || '', l.credit || '', l.currencyId, l.description, l.costCenter, l.reference, l.branch || '']);
+        const rows = previewLines.map(l => [l.entryNumber, l.accountNumber, l.subAccountNumber, getAccountName(l.subAccountNumber || l.accountNumber), l.debit || '', l.credit || '', getCurrencyNameStr(l.currencyId), l.description, l.costCenter, l.reference, l.branch || '']);
         rows.push(['', '', '', '', totalDebit, totalCredit, '', 'الإجمالي', '', '', '']);
         const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
         ws['!cols'] = headers.map(() => ({ wch: 16 }));
@@ -486,14 +717,18 @@ const JournalEntryPage: React.FC = () => {
     };
 
     const handleSave = async () => {
+        if (previewLines.length === 0) return alert('⚠️ خطأ: لا يوجد قيد للحفظ');
+        if (Math.abs(totalDebit - totalCredit) > 0.01) return alert('⚠️ خطأ: القيد غير متزن. المدين لا يساوي الدائن.');
+        if (totalDebit <= 0) return alert('⚠️ خطأ: لا يمكن حفظ قيد بقيمة صفرية');
+
         setSaving(true);
         try {
             const entryLines = previewLines.map(l => ({ id: genId(), entryNumber: l.entryNumber, accountNumber: l.accountNumber, subAccountNumber: l.subAccountNumber, debitAmount: l.debit || 0, creditAmount: l.credit || 0, currencyId: l.currencyId, description: l.description, costCenter: l.costCenter, reference: l.reference }));
             await addJournalEntry({ entryType: mode, title: title || description || 'قيد', lines: entryLines, totalDebit, totalCredit, currencyId, status: 'completed' });
             addLog('إنشاء قيد', `تم إنشاء قيد ${mode === 'simple' ? 'بسيط' : mode === 'compound' ? 'مركب' : 'جماعي'} — المبلغ: ${totalDebit.toLocaleString()}`, 'general');
-            alert('✓ تم حفظ القيد بنجاح');
+            alert('✅ تم حفظ القيد بنجاح');
             setShowPreview(false);
-        } catch (err) { console.error(err); alert('حدث خطأ أثناء الحفظ'); }
+        } catch (err) { console.error(err); alert('❌ حدث خطأ أثناء الحفظ'); }
         setSaving(false);
     };
 
@@ -520,10 +755,11 @@ const JournalEntryPage: React.FC = () => {
             </div>
 
             {/* Mode Selector */}
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl w-fit mx-auto mb-6">
+            <div className="flex bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl p-1.5 rounded-3xl w-fit mx-auto mb-6 shadow-sm border border-white/60 dark:border-slate-700/50 relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 to-fuchsia-500/5 rounded-3xl pointer-events-none"></div>
                 {([['simple', 'receipt', 'قيد بسيط'], ['compound', 'receipt_long', 'قيد مركب'], ['batch', 'dynamic_feed', 'قيود جماعية']] as const).map(([m, icon, label]) => (
-                    <button key={m} onClick={() => setMode(m)} className={`px-6 py-2 rounded-xl font-black text-sm flex items-center gap-2 transition-all ${mode === m ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
-                        <span className="material-symbols-outlined text-lg">{icon}</span>{label}
+                    <button key={m} onClick={() => setMode(m)} className={`relative z-10 px-8 py-2.5 rounded-2xl font-black text-sm flex items-center gap-2.5 transition-all duration-300 ${mode === m ? 'bg-white/90 dark:bg-slate-700/90 text-violet-700 dark:text-violet-300 shadow-md scale-100 border border-white/50' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white/30 dark:hover:bg-slate-700/30 scale-95 hover:scale-100'}`}>
+                        <span className="material-symbols-outlined text-[20px]">{icon}</span>{label}
                     </button>
                 ))}
             </div>
@@ -541,20 +777,27 @@ const JournalEntryPage: React.FC = () => {
 
             {/* Shared Fields */}
             {mode === 'simple' && (
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
-                    <div className="flex flex-wrap items-end gap-4">
-                        <div className="flex-1 min-w-[200px]"><label className="block text-xs font-black text-slate-600 dark:text-slate-400 mb-1">عنوان القيد / البيان العام</label><input value={title} onChange={e => { setTitle(e.target.value); setDescription(e.target.value); }} placeholder="البيان إذا لم يحدد للأطراف..." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 text-sm font-bold outline-none focus:border-violet-500" /></div>
-                        <div className="w-24"><label className="block text-xs font-black text-slate-600 dark:text-slate-400 mb-1">رقم العملة <span className="text-red-400">*</span></label><input type="number" value={currencyId} onChange={e => setCurrencyId(Number(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 text-sm font-bold font-mono outline-none focus:border-violet-500" /></div>
-                        <div className="w-32"><label className="block text-xs font-black text-slate-600 dark:text-slate-400 mb-1">مركز التكلفة</label><input value={costCenter} onChange={e => setCostCenter(e.target.value)} placeholder="اختياري" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 text-sm font-bold outline-none focus:border-violet-500" /></div>
-                        <div className="w-32"><label className="block text-xs font-black text-slate-600 dark:text-slate-400 mb-1">رقم المرجع</label><input value={reference} onChange={e => setReference(e.target.value)} placeholder="اختياري" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 text-sm font-bold outline-none focus:border-violet-500" /></div>
+                <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl rounded-3xl p-6 shadow-xl border border-white/50 dark:border-slate-700/50 relative overflow-hidden group transition-all duration-500 hover:shadow-2xl hover:border-violet-500/30">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-violet-400/5 dark:bg-violet-600/10 rounded-full blur-3xl -z-10 transition-transform duration-700 group-hover:scale-150 group-hover:bg-violet-400/10"></div>
+                    <div className="flex flex-wrap items-end gap-5">
+                        <div className="flex-1 min-w-[200px]"><label className="block text-xs font-black text-slate-600 dark:text-slate-400 mb-1.5 ml-1">عنوان القيد / البيان العام</label><input value={title} onChange={e => { setTitle(e.target.value); setDescription(e.target.value); }} placeholder="البيان إذا لم يحدد للأطراف..." className="w-full bg-white/50 dark:bg-slate-800/50 backdrop-blur-md border border-slate-200/60 dark:border-slate-700/50 rounded-xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 hover:bg-white/80 dark:hover:bg-slate-800/80 transition-all shadow-inner" /></div>
+                        <div className="w-44"><label className="block text-xs font-black text-slate-600 dark:text-slate-400 mb-1.5 ml-1">العملة <span className="text-red-400">*</span></label>
+                        <select value={currencyId} onChange={e => setCurrencyId(Number(e.target.value))} className="w-full bg-white/50 dark:bg-slate-800/50 backdrop-blur-md border border-slate-200/60 dark:border-slate-700/50 rounded-xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 hover:bg-white/80 dark:hover:bg-slate-800/80 transition-all shadow-inner appearance-none">
+                            {customCurrencies.length === 0 && <option value={7}>ريال جديد (7)</option>}
+                            {customCurrencies.filter((c: any) => c.isActive).map((c: any) => (
+                                <option key={c.currencyId} value={c.currencyId}>{c.name} ({c.currencyId})</option>
+                            ))}
+                        </select></div>
+                        <div className="w-36"><label className="block text-xs font-black text-slate-600 dark:text-slate-400 mb-1.5 ml-1">مركز التكلفة</label><input value={costCenter} onChange={e => setCostCenter(e.target.value)} placeholder="اختياري" className="w-full bg-white/50 dark:bg-slate-800/50 backdrop-blur-md border border-slate-200/60 dark:border-slate-700/50 rounded-xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 hover:bg-white/80 dark:hover:bg-slate-800/80 transition-all shadow-inner" /></div>
+                        <div className="w-36"><label className="block text-xs font-black text-slate-600 dark:text-slate-400 mb-1.5 ml-1">رقم المرجع</label><input value={reference} onChange={e => setReference(e.target.value)} placeholder="اختياري" className="w-full bg-white/50 dark:bg-slate-800/50 backdrop-blur-md border border-slate-200/60 dark:border-slate-700/50 rounded-xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500 hover:bg-white/80 dark:hover:bg-slate-800/80 transition-all shadow-inner" /></div>
                     </div>
                 </div>
             )}
 
             {/* Input Method Selector (for compound & batch) */}
             {mode !== 'simple' && (
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-700">
-                    <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-3">
+                <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl rounded-3xl p-6 shadow-xl border border-white/50 dark:border-slate-700/50 mb-4 animate-fade-in transition-all">
+                    <div className="flex gap-2 border-b border-slate-200/50 dark:border-slate-700/50 pb-4">
                         {([['manual', 'edit', 'تعبئة يدوية'], ['paste', 'content_paste', 'لصق بيانات'], ['excel', 'upload_file', 'رفع Excel']] as const).map(([m, icon, label]) => (
                             <button key={m} onClick={() => setInputMethod(m)} className={`px-4 py-2 rounded-lg font-black text-xs flex items-center gap-1.5 transition-all ${inputMethod === m ? 'bg-violet-50 text-violet-600 border border-violet-200' : 'text-slate-500 hover:bg-slate-50'}`}>
                                 <span className="material-symbols-outlined text-[16px]">{icon}</span>{label}
@@ -566,19 +809,25 @@ const JournalEntryPage: React.FC = () => {
                     {inputMethod === 'paste' && (
                         <div className="mt-4 space-y-3">
                             {entrySubType === 'restaurant' ? (
-                                <p className="text-sm text-slate-500 font-bold">الصق البيانات من Excel (كل سطر: <span className="text-orange-500">رقم حساب ← المبلغ ← اسم المطعم ← البيان ← الفرع</span>) مفصولة بـ Tab</p>
+                                <p className="text-sm text-slate-500 font-bold">الصق البيانات من Excel (كل سطر: <span className="text-orange-500">الحساب التحليلي ← المبلغ ← اسم المطعم ← البيان ← المسدد/جهة التحويل</span>) مفصولة بـ Tab</p>
                             ) : (
                                 <p className="text-sm text-slate-500 font-bold">الصق البيانات من Excel (كل سطر: <span className="text-blue-500">الحساب الرئيسي ← الحساب التحليلي ← المبلغ ← العملة ← البيان ← مركز التكلفة ← الرقم المرجعي</span>) مفصولة بـ Tab</p>
                             )}
                             <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={8}
                                 placeholder={entrySubType === 'restaurant'
-                                    ? "3107\t26208\tجريل اند تشل\tعليكم مقابل تحويل...\tعدن\n3135\t136227\tمطعم السعادة\tعليكم مقابل تحويل...\tصنعاء"
+                                    ? "3107\t26208\tجريل اند تشل\tعليكم مقابل تحويل...\tمحفظة نقطة جيب\n3135\t136227\tمطعم السعادة\tعليكم مقابل تحويل...\tصنعاء"
                                     : "1101\t\t50000\t7\tمصاريف إدارية\t6\tREF-001\n1102\t11021\t30000\t7\tمصاريف تشغيلية\t\t"
                                 }
                                 dir="ltr" className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-dashed border-violet-300 dark:border-violet-700 rounded-2xl p-4 font-mono text-sm outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent text-slate-900 dark:text-white" />
-                            <button onClick={handlePasteApply} className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl font-black flex items-center gap-2 shadow-lg transition-all">
-                                <span className="material-symbols-outlined">check</span> تطبيق البيانات
+                            <button onClick={handlePasteApply} disabled={isProcessingPaste} className="px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl font-black flex items-center gap-2 shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isProcessingPaste ? <span className="material-symbols-outlined animate-spin">refresh</span> : <span className="material-symbols-outlined">check</span>}
+                                {isProcessingPaste ? `جاري معالجة البيانات (${pasteProgress}%)` : 'تطبيق البيانات'}
                             </button>
+                            {isProcessingPaste && (
+                                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 mt-2 overflow-hidden shadow-inner">
+                                  <div className="bg-violet-600 h-2.5 rounded-full transition-all duration-300" style={{ width: `${pasteProgress}%` }}></div>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -603,8 +852,9 @@ const JournalEntryPage: React.FC = () => {
             {renderModeForm()}
 
             {/* Generate Preview */}
-            <button onClick={buildPreview} className="w-full py-4 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white rounded-2xl font-black text-lg shadow-lg shadow-violet-500/30 transition-all flex items-center justify-center gap-3 hover:-translate-y-0.5">
-                <span className="material-symbols-outlined text-2xl">preview</span> معاينة القيد
+            <button onClick={buildPreview} className="w-full py-5 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white rounded-3xl font-black text-lg shadow-[0_10px_40px_-10px_rgba(139,92,246,0.6)] transition-all duration-300 flex items-center justify-center gap-3 hover:-translate-y-1 active:scale-[0.98] relative overflow-hidden group">
+                <span className="absolute inset-0 w-full h-full -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent group-hover:animate-shimmer pointer-events-none"></span>
+                <span className="material-symbols-outlined text-3xl transition-transform duration-300 group-hover:rotate-12">preview</span> معاينة واعتماد القيد
             </button>
 
             {/* Unknown Accounts Modal */}
@@ -620,69 +870,23 @@ const JournalEntryPage: React.FC = () => {
 
     // ===================== FORM RENDERERS =====================
 
-    // ===================== SEARCHABLE ACCOUNT COMPONENT =====================
-    function SearchableAccount({ label, value, onChange, accounts, placeholder }: { label: string; value: string; onChange: (v: string) => void; accounts: any[]; placeholder?: string }) {
-        const [search, setSearch] = useState('');
-        const [open, setOpen] = useState(false);
-        const ref = useRef<HTMLDivElement>(null);
-
-        useEffect(() => {
-            const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-            document.addEventListener('mousedown', handler);
-            return () => document.removeEventListener('mousedown', handler);
-        }, []);
-
-        const filtered = useMemo(() => {
-            if (!search.trim()) return accounts.slice(0, 50);
-            const s = search.trim().toLowerCase();
-            return accounts.filter((a: any) => a.accountNumber.includes(s) || a.accountName.toLowerCase().includes(s)).slice(0, 50);
-        }, [accounts, search]);
-
-        const selectedAccount = accounts.find((a: any) => a.accountNumber === value);
-        const displayText = selectedAccount ? `${selectedAccount.accountNumber} - ${selectedAccount.accountName}` : (value || '');
-
-        return (
-            <div ref={ref} className="relative">
-                <label className="block text-xs font-black text-slate-600 dark:text-slate-400 mb-1">{label}</label>
-                <div className="relative">
-                    <input
-                        value={open ? search : displayText}
-                        onChange={e => { setSearch(e.target.value); if (!open) setOpen(true); }}
-                        onFocus={() => { setOpen(true); setSearch(''); }}
-                        placeholder={placeholder || 'ابحث بالرقم أو الاسم...'}
-                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl py-3 pl-4 pr-10 font-bold outline-none focus:ring-2 focus:ring-violet-500 text-slate-900 dark:text-white text-sm"
-                    />
-                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">search</span>
-                    {value && (
-                        <button onClick={() => { onChange(''); setSearch(''); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors">
-                            <span className="material-symbols-outlined text-sm">close</span>
-                        </button>
-                    )}
-                </div>
-                {open && (
-                    <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl max-h-60 overflow-y-auto">
-                        {filtered.length === 0 ? (
-                            <p className="px-4 py-3 text-sm text-slate-400 font-bold text-center">لا توجد نتائج</p>
-                        ) : filtered.map((a: any) => (
-                            <button key={a.id} onClick={() => { onChange(a.accountNumber); setOpen(false); setSearch(''); }}
-                                className={`w-full text-right px-4 py-2.5 text-sm font-bold hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors flex items-center gap-2 ${value === a.accountNumber ? 'bg-violet-50 dark:bg-violet-900/20 text-violet-600' : 'text-slate-700 dark:text-slate-200'}`}>
-                                <span className="font-mono text-xs text-blue-500 min-w-[50px]">{a.accountNumber}</span>
-                                <span className="truncate">{a.accountName}</span>
-                                {a.branch && <span className="mr-auto text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-lg">{a.branch}</span>}
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </div>
-        );
-    }
 
     function renderAccountSelect(label: string, value: string, onChange: (v: string) => void, subValue: string, onSubChange: (v: string) => void) {
+        // إذا كان الحساب دائن/مسدد → نعرض فقط الحسابات البنكية
+        const isCreditSelector = label.includes('الدائن') || label.includes('دائن') || label.includes('المسدد');
+        const accountsList = isCreditSelector ? (bankAccounts.length > 0 ? bankAccounts.filter((a: any) => a.accountType === 'main') : mainAccounts) : chartAccounts;
+        const getFilteredSubs = (parentNum: string) => {
+            if (isCreditSelector && bankAccounts.length > 0) {
+                // نعرض الحسابات الفرعية البنكية فقط
+                return bankAccounts.filter((a: any) => a.accountType === 'sub' && a.parentAccountNumber === parentNum);
+            }
+            return getSubAccounts(parentNum);
+        };
         return (
             <div className="space-y-2">
-                <SearchableAccount label={`${label} — الحساب`} value={value} onChange={v => { onChange(v); onSubChange(''); }} accounts={chartAccounts} />
-                {value && getSubAccounts(value).length > 0 && (
-                    <SearchableAccount label={`${label} — التحليلي`} value={subValue} onChange={onSubChange} accounts={getSubAccounts(value)} />
+                <SearchableAccount label={`${label} — الحساب${isCreditSelector ? ' (بنكي)' : ''}`} value={value} onChange={v => { onChange(v); onSubChange(''); }} accounts={accountsList} />
+                {value && getFilteredSubs(value).length > 0 && (
+                    <SearchableAccount label={`${label} — التحليلي`} value={subValue} onChange={onSubChange} accounts={getFilteredSubs(value)} />
                 )}
             </div>
         );
@@ -690,7 +894,8 @@ const JournalEntryPage: React.FC = () => {
 
     function renderModeForm() {
         if (mode === 'simple') return (
-            <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+            <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl rounded-3xl p-6 shadow-xl border border-white/50 dark:border-slate-700/50 space-y-5 animate-fade-in relative overflow-hidden group transition-all duration-500 hover:shadow-2xl hover:border-violet-500/30">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-violet-400/5 dark:bg-violet-600/10 rounded-full blur-3xl -z-10 transition-transform duration-700 group-hover:scale-150 group-hover:bg-violet-400/10"></div>
 
                 <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3 text-slate-800 dark:text-white font-black text-sm">
                     <span className="material-symbols-outlined text-violet-500 text-[18px]">receipt</span> تفاصيل القيد
@@ -718,7 +923,8 @@ const JournalEntryPage: React.FC = () => {
         );
 
         if (mode === 'compound') return (
-            <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 space-y-4 mt-4">
+            <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl rounded-3xl p-6 shadow-xl border border-white/50 dark:border-slate-700/50 space-y-6 mt-4 relative overflow-hidden animate-fade-in group transition-all duration-500 hover:shadow-2xl hover:border-amber-500/30">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/5 dark:bg-amber-600/10 rounded-full blur-3xl -z-10 transition-transform duration-700 group-hover:scale-150 group-hover:bg-amber-400/10"></div>
                 <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
                     <h3 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
                         <span className="material-symbols-outlined text-amber-500 text-[18px]">receipt_long</span> تفاصيل القيد المركب
@@ -774,8 +980,9 @@ const JournalEntryPage: React.FC = () => {
 
         // Batch
         return (
-            <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-700 space-y-4 mt-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+            <div className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl rounded-3xl p-6 shadow-xl border border-white/50 dark:border-slate-700/50 space-y-6 mt-4 relative overflow-hidden animate-fade-in group transition-all duration-500 hover:shadow-2xl hover:border-emerald-500/30">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-400/5 dark:bg-emerald-600/10 rounded-full blur-3xl -z-10 transition-transform duration-700 group-hover:scale-150 group-hover:bg-emerald-400/10"></div>
+                <div className="flex items-center justify-between pb-4 border-b border-slate-200/50 dark:border-slate-700/50">
                     <h3 className="font-black text-lg text-slate-700 dark:text-white flex items-center gap-2">
                         <span className="material-symbols-outlined text-emerald-500">dynamic_feed</span>
                         قيود جماعية ({batchDebits.length} قيد)
@@ -794,7 +1001,7 @@ const JournalEntryPage: React.FC = () => {
                     {/* رأس الأعمدة */}
                     <div className="flex flex-wrap gap-2 px-3 pb-1">
                         <span className="w-6" />
-                        <span className="flex-1 min-w-[140px] text-[10px] font-black text-slate-400 uppercase">الحساب الرئيسي</span>
+                        {entrySubType !== 'restaurant' && <span className="flex-1 min-w-[140px] text-[10px] font-black text-slate-400 uppercase">الحساب الرئيسي</span>}
                         <span className="flex-1 min-w-[140px] text-[10px] font-black text-slate-400 uppercase">الحساب التحليلي</span>
                         <span className="w-28 text-[10px] font-black text-slate-400 uppercase">المبلغ</span>
                         {entrySubType === 'restaurant' ? (
@@ -852,13 +1059,46 @@ const JournalEntryPage: React.FC = () => {
                                             v[i] = { ...v[i], creditAccountNumber: sub ? main : '', creditSubAccountNumber: sub };
                                             setBatchDebits(v);
                                         }} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2 px-3 font-bold text-sm outline-none text-slate-900 dark:text-white appearance-none">
-                                            <option value="">اختر المسدد الدائن...</option>
-                                            {chartAccounts.filter((a: any) => a.accountType === 'sub').map((a: any) => (
-                                                <option key={a.accountNumber} value={a.accountNumber}>{a.accountName}</option>
-                                            ))}
+                                            <option value="">اختر المسدد (البنكي)...</option>
+                                            {paymentAccounts && paymentAccounts.length > 0 ? (
+                                                paymentAccounts.filter((pa: any) => pa.systemAccountNumber && pa.isActive !== false).map((pa: any) => {
+                                                    const chartAcc = chartAccounts.find((a: any) => a.accountNumber === pa.systemAccountNumber);
+                                                    return (
+                                                        <option key={pa.id} value={pa.systemAccountNumber}>
+                                                            {pa.accountName}{chartAcc ? ` (${chartAcc.accountNumber})` : ''}
+                                                        </option>
+                                                    );
+                                                })
+                                            ) : (
+                                                chartAccounts.filter((a: any) => a.category === 'بنوك' || (a.accountNature && a.accountNature.includes('بنك'))).map((a: any) => (
+                                                    <option key={a.accountNumber} value={a.accountNumber}>{a.accountName}</option>
+                                                ))
+                                            )}
                                         </select>
                                     </div>
-                                    <div className="w-24"><input value={(d as any).branch || ''} onChange={e => { const v = [...batchDebits]; v[i] = { ...v[i], branch: e.target.value }; setBatchDebits(v); }} placeholder="الفرع" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2 px-3 font-bold text-sm outline-none text-slate-900 dark:text-white" /></div>
+                                    <div className="w-24">
+                                        <select 
+                                            value={(d as any).branch || ''} 
+                                            onChange={e => { 
+                                                const val = e.target.value;
+                                                const branchObj = branches?.find((b: any) => b.name === val);
+                                                const v = [...batchDebits]; 
+                                                let overridePayer = v[i].creditSubAccountNumber;
+                                                if (branchObj && branchObj.creditSubAccountNumber && !v[i].creditSubAccountNumber) {
+                                                    overridePayer = branchObj.creditSubAccountNumber;
+                                                } else if (branchObj && branchObj.creditSubAccountNumber) {
+                                                    // User asked: "وتعرف فرع السداد والعملة اليا" so override if branch changes
+                                                    overridePayer = branchObj.creditSubAccountNumber;
+                                                }
+                                                v[i] = { ...v[i], branch: val, creditSubAccountNumber: overridePayer }; 
+                                                setBatchDebits(v); 
+                                            }} 
+                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2 px-3 font-bold text-sm outline-none text-slate-900 dark:text-white appearance-none"
+                                        >
+                                            <option value="">الفرع...</option>
+                                            {branches && branches.map((b: any) => <option key={b.id} value={b.name}>{b.name}</option>)}
+                                        </select>
+                                    </div>
                                 </>
                             ) : (
                                 <>

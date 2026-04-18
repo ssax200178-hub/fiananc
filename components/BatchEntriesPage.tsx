@@ -14,6 +14,7 @@ const BatchEntriesPage: React.FC = () => {
 
     const [entryEdits, setEntryEdits] = useState<Record<string, { entryNumber: string; contraEntryNumber: string; exchangeRateDescription: string }>>({});
     const [saving, setSaving] = useState<string | null>(null);
+    const [showPosted, setShowPosted] = useState(false);
 
     const batch = invoiceBatches.find(b => b.id === batchId) || null;
 
@@ -25,10 +26,13 @@ const BatchEntriesPage: React.FC = () => {
     useEffect(() => {
         const edits: Record<string, { entryNumber: string; contraEntryNumber: string; exchangeRateDescription: string }> = {};
         invoiceBatchItems.forEach(item => {
+            const formattedDate = item.disbursementDate ? item.disbursementDate.split('T')[0].replace(/-/g, '/') : '';
+            const defaultExchangeDesc = `مقابل قيمة دفاتر فواتير توصيل عدد ${item.bookletCount} لفرع صنعاء على فرع ${item.branchName} بتاريخ ${formattedDate} (${item.branchName}) لكم صرف فواتير من ${item.rangeFrom} الى ${item.rangeTo}بتاريخ${formattedDate}`;
+
             edits[item.id] = { 
                 entryNumber: item.entryNumber || '', 
                 contraEntryNumber: item.contraEntryNumber || '',
-                exchangeRateDescription: item.exchangeRateDescription || ''
+                exchangeRateDescription: item.exchangeRateDescription || defaultExchangeDesc
             };
         });
         setEntryEdits(edits);
@@ -49,6 +53,19 @@ const BatchEntriesPage: React.FC = () => {
         } catch (err) {
             console.error(err);
             alert('حدث خطأ أثناء حفظ القيد');
+        }
+        setSaving(null);
+    };
+
+    const handleUnpostEntry = async (item: InvoiceBatchItem) => {
+        setSaving(item.id);
+        try {
+            await updateInvoiceBatchItem(item.id, { isPosted: false });
+            addLog('إلغاء الترحيل', `تم إلغاء ترحيل قيود الفرع ${item.branchName} بالمدى ${item.rangeFrom}-${item.rangeTo}`, 'general');
+            alert('تم إلغاء الترحيل بنجاح ✓');
+        } catch (err) {
+            console.error(err);
+            alert('حدث خطأ أثناء إلغاء الترحيل');
         }
         setSaving(null);
     };
@@ -327,8 +344,9 @@ const BatchEntriesPage: React.FC = () => {
         );
     }
 
-    const totalOld = invoiceBatchItems.reduce((s, i) => s + (i.amountOld || 0), 0);
-    const totalNew = invoiceBatchItems.reduce((s, i) => s + (i.amountNew || 0), 0);
+    const displayItems = invoiceBatchItems.filter(item => !!item.isPosted === showPosted);
+    const totalOld = displayItems.reduce((s, i) => s + (i.amountOld || 0), 0);
+    const totalNew = displayItems.reduce((s, i) => s + (i.amountNew || 0), 0);
 
     return (
         <div className="p-4 md:p-8 space-y-6 animate-fade-in" dir="rtl">
@@ -345,6 +363,11 @@ const BatchEntriesPage: React.FC = () => {
                     </p>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
+                    <button onClick={() => setShowPosted(!showPosted)}
+                        className={`px-6 py-3 border rounded-2xl font-black transition-all flex items-center gap-2 shadow-sm hover:shadow-md ${showPosted ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800' : 'bg-white text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'}`}>
+                        <span className="material-symbols-outlined">{showPosted ? 'pending_actions' : 'task_alt'}</span>
+                        {showPosted ? 'عرض القيود غير المرحلة' : 'عرض القيود المرحلة'}
+                    </button>
                     {canManageEntries && (
                         <button onClick={() => setShowExportModal(true)}
                             className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-2xl font-black transition-all flex items-center gap-2 shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50 hover:-translate-y-0.5">
@@ -352,7 +375,7 @@ const BatchEntriesPage: React.FC = () => {
                             نافذة تصدير القيود
                         </button>
                     )}
-                    <button onClick={() => navigate('/invoice-batches')}
+                    <button onClick={() => navigate(-1)}
                         className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-2xl font-black hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm hover:shadow-md flex items-center gap-2">
                         <span className="material-symbols-outlined">arrow_back</span>
                         العودة
@@ -470,10 +493,10 @@ const BatchEntriesPage: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                            {invoiceBatchItems.length === 0 ? (
-                                <tr><td colSpan={10} className="px-6 py-16 text-center text-slate-400 font-bold">لا توجد صرفيات</td></tr>
-                            ) : invoiceBatchItems.map(item => (
-                                <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+                            {displayItems.length === 0 ? (
+                                <tr><td colSpan={10} className="px-6 py-16 text-center text-slate-400 font-bold">لا توجد {showPosted ? 'قيود مرحلة' : 'صرفيات غير مرحلة'}</td></tr>
+                            ) : displayItems.map(item => (
+                                <tr key={item.id} className={`transition-colors ${item.isPosted ? 'bg-emerald-50/30 dark:bg-emerald-900/10' : 'hover:bg-slate-50/50 dark:hover:bg-slate-700/30'}`}>
                                     <td className="px-4 py-3">
                                         <span className="px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-black">{item.branchName}</span>
                                     </td>
@@ -482,21 +505,21 @@ const BatchEntriesPage: React.FC = () => {
                                     <td className="px-4 py-3 font-mono font-black text-blue-600">{item.amountOld?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                     <td className="px-4 py-3 font-mono font-bold text-emerald-600">{item.amountNew ? item.amountNew.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
                                     <td className="px-4 py-3">
-                                        {canManageEntries ? (
+                                        {canManageEntries && !item.isPosted ? (
                                             <input type="text" value={entryEdits[item.id]?.entryNumber || ''}
                                                 onChange={(e) => setEntryEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], entryNumber: e.target.value } }))}
                                                 className="w-24 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2 px-3 font-mono text-sm outline-none focus:ring-2 focus:ring-purple-500" />
                                         ) : <span className="font-mono text-sm">{item.entryNumber || '—'}</span>}
                                     </td>
                                     <td className="px-4 py-3">
-                                        {canManageEntries ? (
+                                        {canManageEntries && !item.isPosted ? (
                                             <input type="text" value={entryEdits[item.id]?.contraEntryNumber || ''}
                                                 onChange={(e) => setEntryEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], contraEntryNumber: e.target.value } }))}
                                                 className="w-24 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl py-2 px-3 font-mono text-sm outline-none focus:ring-2 focus:ring-purple-500" />
                                         ) : <span className="font-mono text-sm">{item.contraEntryNumber || '—'}</span>}
                                     </td>
                                     <td className="px-4 py-3 text-xs text-slate-500">
-                                        {canManageEntries ? (
+                                        {canManageEntries && !item.isPosted ? (
                                             <textarea 
                                                 value={entryEdits[item.id]?.exchangeRateDescription || ''}
                                                 onChange={(e) => setEntryEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], exchangeRateDescription: e.target.value } }))}
@@ -517,21 +540,28 @@ const BatchEntriesPage: React.FC = () => {
                                     <td className="px-4 py-3 text-sm font-bold text-slate-500">{item.disbursementDate ? new Date(item.disbursementDate).toLocaleDateString('ar-SA') : '—'}</td>
                                     {canManageEntries && (
                                         <td className="px-4 py-3 text-center">
-                                            <button onClick={() => handleSaveEntry(item)} disabled={saving === item.id}
-                                                className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-black text-xs transition-all disabled:opacity-50">
-                                                {saving === item.id ? '...' : 'حفظ'}
-                                            </button>
+                                            {!item.isPosted ? (
+                                                <button onClick={() => handleSaveEntry(item)} disabled={saving === item.id}
+                                                    className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-black text-xs transition-all disabled:opacity-50">
+                                                    {saving === item.id ? '...' : 'ترحيل'}
+                                                </button>
+                                            ) : (
+                                                <button onClick={() => handleUnpostEntry(item)} disabled={saving === item.id}
+                                                    className="px-3 py-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800/50 rounded-xl font-black text-xs transition-all disabled:opacity-50 whitespace-nowrap">
+                                                    {saving === item.id ? '...' : 'إلغاء الترحيل'}
+                                                </button>
+                                            )}
                                         </td>
                                     )}
                                 </tr>
                             ))}
                         </tbody>
-                        {invoiceBatchItems.length > 0 && (
+                        {displayItems.length > 0 && (
                             <tfoot>
                                 <tr className="bg-purple-50/30 dark:bg-purple-900/10 font-black">
                                     <td className="px-4 py-4 text-purple-700 dark:text-purple-300">الإجمالي</td>
                                     <td></td>
-                                    <td className="px-4 py-4 font-mono">{invoiceBatchItems.reduce((s, i) => s + (i.bookletCount || 0), 0)}</td>
+                                    <td className="px-4 py-4 font-mono">{displayItems.reduce((s, i) => s + (i.bookletCount || 0), 0)}</td>
                                     <td className="px-4 py-4 font-mono text-blue-700">{totalOld.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
                                     <td className="px-4 py-4 font-mono text-emerald-700">{totalNew > 0 ? totalNew.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td>
                                     <td colSpan={5}></td>

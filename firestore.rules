@@ -210,6 +210,12 @@ service cloud.firestore {
         allow write: if canDo('app', 'exchange_rates_manage');
       }
 
+      // --- custom_currencies ---
+      match /custom_currencies/{docId} {
+        allow read: if isAuthenticated('app');
+        allow write: if canDo('app', 'settings_manage') || isActiveAdmin('app');
+      }
+
       // --- invoice_batches ---
       match /invoice_batches/{batchId} {
         allow read: if isAuthenticated('app');
@@ -434,6 +440,12 @@ service cloud.firestore {
       match /exchange_rates/{docId} {
         allow read: if isAuthenticated('app_staging');
         allow write: if canDo('app_staging', 'exchange_rates_manage');
+      }
+
+      // --- custom_currencies ---
+      match /custom_currencies/{docId} {
+        allow read: if isAuthenticated('app_staging');
+        allow write: if canDo('app_staging', 'settings_manage') || isActiveAdmin('app_staging');
       }
 
       match /exchange_rate_history/{docId} {

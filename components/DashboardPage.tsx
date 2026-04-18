@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAppContext } from '../AppContext';
 import { DashboardCharts } from './DashboardCharts';
+import { PremiumDashboardPage } from './PremiumDashboardPage';
 import { safeCompare } from '../utils';
 
 const DashboardPage: React.FC = () => {
@@ -13,6 +14,16 @@ const DashboardPage: React.FC = () => {
     const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
     const [quickTipText, setQuickTipText] = useState('');
     const [quickTipType, setQuickTipType] = useState<'tip' | 'alert' | 'warning' | 'guidance'>('tip');
+    const [isPremium, setIsPremium] = useState(() => {
+        const saved = localStorage.getItem('isPremiumMode');
+        return saved === null ? true : saved === 'true';
+    });
+
+    const togglePremium = () => {
+        const newValue = !isPremium;
+        setIsPremium(newValue);
+        localStorage.setItem('isPremiumMode', JSON.stringify(newValue));
+    };
 
     // UI State for Departments
     const [selectedGroupTitle, setSelectedGroupTitle] = useState<string | null>(null);
@@ -171,8 +182,30 @@ const DashboardPage: React.FC = () => {
         return { matched, total, matchRate, topVariance };
     }, [history]);
 
+    if (isPremium) {
+        return (
+            <div className="relative">
+                <PremiumDashboardPage />
+                <button 
+                    onClick={togglePremium}
+                    className="fixed bottom-6 left-6 z-[100] px-4 py-2 bg-slate-800/50 hover:bg-slate-800 backdrop-blur-md text-white/50 hover:text-white rounded-full text-xs font-bold border border-white/10 transition-all flex items-center gap-2"
+                >
+                    <span className="material-symbols-outlined text-sm">settings_backup_restore</span>
+                    الرجوع للنسخة العادية
+                </button>
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-950 pb-20 select-none animate-fade-in" dir="rtl">
+            <button 
+                onClick={togglePremium}
+                className="fixed bottom-6 left-6 z-[100] px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-xs font-bold shadow-xl transition-all flex items-center gap-2"
+            >
+                <span className="material-symbols-outlined text-sm">auto_awesome</span>
+                الوضع المتميز (Premium)
+            </button>
             <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-10">
 
                 {/* Hero Section */}

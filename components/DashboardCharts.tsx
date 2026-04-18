@@ -4,6 +4,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid,
     LineChart, Line
 } from 'recharts';
+import { PremiumCard } from './PremiumCard';
 
 interface DashboardChartsProps {
     restaurantStats: {
@@ -14,7 +15,7 @@ interface DashboardChartsProps {
     reconTrends: any[];
 }
 
-const COLORS = ['#10b981', '#ef4444', '#3b82f6', '#f59e0b', '#8b5cf6'];
+const PREMIUM_COLORS = ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6'];
 
 export const DashboardCharts: React.FC<DashboardChartsProps> = ({ restaurantStats, cashFlowData, reconTrends }) => {
     const pieData = [
@@ -22,14 +23,24 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({ restaurantStat
         { name: 'بدون قيود', value: Number(restaurantStats?.withoutAccount || 0) },
     ];
 
+    const CustomTooltip = ({ active, payload, label }: any) => {
+        if (active && payload && payload.length) {
+            return (
+                <div className="bg-slate-900/90 border border-indigo-500/30 backdrop-blur-md p-3 rounded-xl shadow-2xl">
+                    <p className="text-white font-bold mb-1">{label || payload[0].name}</p>
+                    <p className="text-indigo-400 font-black text-lg">
+                        {payload[0].value.toLocaleString()}
+                    </p>
+                </div>
+            );
+        }
+        return null;
+    };
+
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Account Status Pie Chart */}
-            <div className="bg-white dark:bg-[#1e293b] p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <h3 className="text-lg font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-emerald-500">pie_chart</span>
-                    حالة حسابات المطاعم
-                </h3>
+            <PremiumCard title="حالة حسابات المطاعم" icon="pie_chart">
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
@@ -37,66 +48,88 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({ restaurantStat
                                 data={pieData || []}
                                 cx="50%"
                                 cy="50%"
-                                innerRadius={60}
-                                outerRadius={80}
-                                paddingAngle={5}
+                                innerRadius={70}
+                                outerRadius={90}
+                                paddingAngle={8}
                                 dataKey="value"
+                                stroke="none"
                             >
                                 {(pieData || []).map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    <Cell key={`cell-${index}`} fill={PREMIUM_COLORS[index % PREMIUM_COLORS.length]} />
                                 ))}
                             </Pie>
-                            <Tooltip
-                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                itemStyle={{ fontWeight: 'bold' }}
+                            <Tooltip content={<CustomTooltip />} />
+                            <Legend 
+                                verticalAlign="bottom" 
+                                height={36} 
+                                wrapperStyle={{ paddingTop: '20px', fontWeight: 'bold', fontSize: '12px' }}
                             />
-                            <Legend verticalAlign="bottom" height={36} />
                         </PieChart>
                     </ResponsiveContainer>
                 </div>
-            </div>
+            </PremiumCard>
 
             {/* Cash Flow Bar Chart */}
-            <div className="bg-white dark:bg-[#1e293b] p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <h3 className="text-lg font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-blue-500">bar_chart</span>
-                    توزيع السيولة النقدية
-                </h3>
+            <PremiumCard title="توزيع السيولة النقدية" icon="bar_chart">
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={cashFlowData || []}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 'bold' }} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                            <Tooltip
-                                cursor={{ fill: 'transparent' }}
-                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                            <XAxis 
+                                dataKey="name" 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }} 
                             />
-                            <Bar dataKey="balance" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                            <YAxis 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tick={{ fill: '#94a3b8', fontSize: 11 }} 
+                            />
+                            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                            <Bar dataKey="balance" fill="url(#indigoGradient)" radius={[6, 6, 0, 0]} />
+                            <defs>
+                                <linearGradient id="indigoGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#818cf8" stopOpacity={1}/>
+                                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0.8}/>
+                                </linearGradient>
+                            </defs>
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
-            </div>
+            </PremiumCard>
 
             {/* Recon Trends Line Chart */}
-            <div className="lg:col-span-2 bg-white dark:bg-[#1e293b] p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <h3 className="text-lg font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-amber-500">trending_up</span>
-                    نشاط المطابقة (آخر 7 دفعات)
-                </h3>
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={reconTrends || []}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 'bold' }} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                            <Tooltip
-                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                            />
-                            <Line type="monotone" dataKey="matches" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 6 }} activeDot={{ r: 8 }} />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
+            <div className="lg:col-span-2">
+                <PremiumCard title="نشاط المطابقة (آخر 7 دفعات)" icon="trending_up">
+                    <div className="h-72">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={reconTrends || []}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                                <XAxis 
+                                    dataKey="date" 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }} 
+                                />
+                                <YAxis 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{ fill: '#94a3b8', fontSize: 11 }} 
+                                />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Line 
+                                    type="monotone" 
+                                    dataKey="matches" 
+                                    stroke="#6366f1" 
+                                    strokeWidth={4} 
+                                    dot={{ r: 6, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }} 
+                                    activeDot={{ r: 8, strokeWidth: 0 }} 
+                                />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                </PremiumCard>
             </div>
         </div>
     );

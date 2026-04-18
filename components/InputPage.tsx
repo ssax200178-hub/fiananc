@@ -241,15 +241,7 @@ const InputPage: React.FC = () => {
     return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0])); // Recent dates first
   }, [history]);
 
-  const COLORS = {
-    primary: '#6366f1', // Indigo
-    secondary: '#8b5cf6', // Violet
-    accent: '#f59e0b', // Amber
-    success: '#10b981', // Emerald
-    danger: '#ef4444', // Red
-    bg: '#0f172a', // Slate 900
-    card: 'rgba(30, 41, 59, 0.7)', // Slate 800 with transparency
-  };
+  // Removed hardcoded COLORS object - using colors.css variables instead
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0f172a] text-slate-900 dark:text-slate-200 font-sans selection:bg-indigo-500/30 transition-colors duration-500">

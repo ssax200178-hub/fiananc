@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { confirmDialog, promptDialog } from '../utils/confirm';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../AppContext';
 import { parseNumber, safeCompare } from '../utils';
 import html2canvas from 'html2canvas';
@@ -35,12 +35,14 @@ const AnalysisPage: React.FC = () => {
     const { enqueueSnackbar } = useSnackbar();
     const { currentData, updateCurrentData, resetCurrentData, currency, theme, colors, updateHistoryItem, currentUser } = useAppContext();
 
-    // UI States
-    const [showSettings, setShowSettings] = useState(false);
-    const [showLinkManager, setShowLinkManager] = useState(false); // Modal State
-    const [expandedRow, setExpandedRow] = useState<string | null>(null); // For Details Expansion
-    const [activeLinkRow, setActiveLinkRow] = useState<string | null>(null); // For Manual Link Input toggle
-    const [activeTab, setActiveTab] = useState<'summary' | 'details' | 'ledger'>('summary');
+    const [searchParams, setSearchParams] = useSearchParams();
+    const activeTab = (searchParams.get('tab') as 'summary' | 'details' | 'ledger') || 'summary';
+    const setActiveTab = (tab: string) => {
+        setSearchParams(prev => {
+            prev.set('tab', tab);
+            return prev;
+        });
+    };
     const [showActivityLog, setShowActivityLog] = useState(false);
 
     // Dismiss Modal State
@@ -60,11 +62,11 @@ const AnalysisPage: React.FC = () => {
     // Action Logs (Task 1)
     const [actionLogs, setActionLogs] = useState<{ timestamp: string, user: string, action: string }[]>([]);
 
-    // Color Constants
+    // Color Constants - Migrated to CSS Variables
     const COLORS = {
-        positive: '#d97706', // amber-600
-        negative: '#dc2626', // red-600
-        matched: '#10b981'   // emerald-500
+        positive: 'var(--color-positive)', // Migrated from amber-600
+        negative: 'var(--color-negative)', // Migrated from red-600
+        matched: 'var(--color-matched)'    // Migrated from emerald-500
     };
 
     // Phase 7.2: Persistent Matching Settings
@@ -97,6 +99,12 @@ const AnalysisPage: React.FC = () => {
 
     const [sortField, setSortField] = useState<SortField>('date');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+
+    // UI States for link management and row expansion
+    const [activeLinkRow, setActiveLinkRow] = useState<string | null>(null);
+    const [expandedRow, setExpandedRow] = useState<string | null>(null);
+    const [showLinkManager, setShowLinkManager] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
 
     // --- Helper: Standardize Date ---
     const standardizeDate = (input: string): string => {

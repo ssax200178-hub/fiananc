@@ -1,6 +1,6 @@
 import { doc, setDoc, updateDoc, deleteDoc, getDocs, query, collection, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { FinancialTip, Branch, ExchangeRates, ExchangeRateHistory, DevFeedbackSettings, FeatureFlags, LiquidityMapping, OperationalSheet, LoanRequest, Employee, Deduction } from '../../AppContext';
+import { FinancialTip, Branch, ExchangeRates, ExchangeRateHistory, DevFeedbackSettings, FeatureFlags, LiquidityMapping, OperationalSheet, LoanRequest, Employee, Deduction, AppCurrency } from '../../AppContext';
 import { generateId } from '../../utils';
 
 const ROOT_COLLECTION = (import.meta as any).env.MODE === 'staging' ? 'app_staging' : 'app';
@@ -42,6 +42,14 @@ export const settingsService = {
     },
     updateFeatureFlags: async (flags: Partial<FeatureFlags>) => {
         await setDoc(doc(db, ROOT_COLLECTION, DATA_PATH, 'settings', 'feature_flags'), flags, { merge: true });
+    },
+
+    // Custom Currencies
+    saveCustomCurrency: async (currency: AppCurrency) => {
+        await setDoc(doc(db, ROOT_COLLECTION, DATA_PATH, 'custom_currencies', currency.id), currency);
+    },
+    deleteCustomCurrency: async (id: string) => {
+        await deleteDoc(doc(db, ROOT_COLLECTION, DATA_PATH, 'custom_currencies', id));
     },
 
     // Operational Sheets
@@ -142,5 +150,10 @@ export const settingsService = {
     },
     updateSyncMetadata: async (metadata: any) => {
         await setDoc(doc(db, ROOT_COLLECTION, DATA_PATH, 'sync_metadata', 'tawseel_sync'), metadata);
+    },
+
+    // Automation Configuration
+    saveAutomationConfig: async (config: any) => {
+        await setDoc(doc(db, ROOT_COLLECTION, DATA_PATH, 'settings', 'automation_config'), config, { merge: true });
     }
 };

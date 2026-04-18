@@ -1,0 +1,132 @@
+/* 
+  Premium Design System - Tawseel Financial
+  Fine-tuned for High-End Fintech Visuals
+*/
+
+:root {
+  /* Core Palette */
+  --premium-bg: #030712; /* Slate-950 */
+  --premium-surface: rgba(15, 23, 42, 0.6); /* Slate-900 with Alpha */
+  --premium-accent-indigo: #6366f1;
+  --premium-accent-cyan: #06b6d4;
+  --premium-accent-emerald: #10b981;
+  
+  /* Glassmorphism */
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --glass-blur: 16px;
+  
+  /* Typography */
+  --font-premium: 'Outfit', 'Inter', sans-serif;
+  --font-arabic: 'Noto Sans Arabic', sans-serif;
+}
+
+/* Global Immersive Background */
+body.premium-mode {
+  background-color: var(--premium-bg);
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(6, 182, 212, 0.1) 0px, transparent 50%);
+  background-attachment: fixed;
+  color: #f8fafc;
+  font-family: var(--font-arabic);
+}
+
+/* Premium Card (Glassmorphic) */
+.premium-card {
+  background: var(--premium-surface);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  box-shadow: var(--glass-shadow);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  position: relative;
+}
+
+.premium-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.05), transparent);
+  pointer-events: none;
+}
+
+.premium-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Typography Utilities */
+.text-premium {
+  font-family: var(--font-premium);
+  letter-spacing: -0.02em;
+}
+
+.gradient-text-indigo {
+  background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Stat Display */
+.premium-stat-value {
+  font-family: var(--font-premium);
+  font-weight: 800;
+  font-size: 2.5rem;
+  line-height: 1;
+  background: linear-gradient(to bottom, #fff, #94a3b8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Micro-Animations */
+@keyframes premium-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-premium-fade-up {
+  animation: premium-fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Layout Utilities */
+.premium-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+/* Dashboard Specifc */
+.premium-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  text-decoration: none;
+  color: inherit;
+}
+
+.premium-nav-item:hover {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.2);
+  transform: translateX(-4px); 
+}
+
+[dir="rtl"] .premium-nav-item:hover {
+  transform: translateX(4px);
+}

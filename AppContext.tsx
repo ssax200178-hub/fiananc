@@ -45,6 +45,7 @@ export type UserPermission =
     | 'employees_import'
     // Settings
     | 'settings_manage'
+    | 'automation_manage'
     | 'developer_access'
     // Tips
     | 'tips_view'
@@ -100,6 +101,7 @@ export type UserPermission =
     | 'view_activity_logs'
     | 'manage_users'
     | 'manage_settings'
+    | 'automation_manage'
     | 'manage_tips';
 
 export interface PermissionItem {
@@ -215,6 +217,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         permissions: [
             { key: 'settings_manage', label: 'إدارة الإعدادات', icon: 'tune', description: 'التحكم في إعدادات النظام العامة' },
             { key: 'exchange_rates_manage', label: 'إدارة أسعار الصرف', icon: 'currency_exchange', description: 'تعديل أسعار صرف العملات' },
+            { key: 'automation_manage', label: 'أتمتة السحب الآلي', icon: 'smart_toy', description: 'إدارة إعدادات السيرفر الخفي للسحب الآلي' },
             { key: 'developer_access', label: 'صلاحيات المطورين', icon: 'terminal', description: 'الوصول إلى أدوات المطورين وملاحظات النظام' },
         ]
     },
@@ -281,7 +284,7 @@ export const OLD_TO_NEW_PERMISSIONS: Record<string, UserPermission[]> = {
     'view_history': ['archives_view'],
     'view_activity_logs': ['logs_view'],
     'manage_users': ['users_view', 'users_add', 'users_edit', 'users_delete', 'users_permissions', 'employees_import'],
-    'manage_settings': ['settings_manage', 'developer_access'],
+    'manage_settings': ['settings_manage', 'exchange_rates_manage', 'automation_manage', 'developer_access'],
     'manage_tips': ['tips_view', 'tips_add', 'tips_delete'],
 };
 
@@ -297,6 +300,8 @@ export interface User {
     email?: string; // Add email for Firebase
     firebaseUid?: string; // Firebase Auth UID (for security rules)
     permissions?: UserPermission[]; // Detailed permissions
+    branch?: string; // Branch name for filtering and styling
+    allowedMainAccounts?: string[]; // Arrays of main account numbers (or any account number) allowed for this user
     lastSeenAt?: string; // ISO timestamp of last login
 }
 
@@ -449,6 +454,9 @@ export interface Restaurant {
     logoUrl?: string;
     balance?: number; // Current payment balance
     systemAccountNumber?: string; // رقم الحساب في النظام الأساسي (tawseel.app)
+    commission?: string | number; // نسبة المطعم
+    timings?: string; // أوقات العمل
+    address?: string; // العنوان
 }
 
 export interface LiquidityMapping {
@@ -503,6 +511,16 @@ export interface FeatureFlags {
     [key: string]: boolean;
 }
 
+// Custom Currencies Management
+export interface AppCurrency {
+    id: string;
+    currencyId: number;         // e.g. 7, 8, 12
+    name: string;               // e.g. "ريال يمني جديد", "عملة فواتير"
+    defaultAccountId?: string;  // e.g. "12345" mapped to Chart of Accounts
+    isActive: boolean;
+    createdAt?: string;
+}
+
 // الخصميات والإنذارات
 export type DeductionType = 'verbal_warning' | 'quarter_day' | 'half_day' | 'full_day_warning' | 'full_day';
 
@@ -535,6 +553,7 @@ export interface InvoiceBatch {
     totalAmountStamp: number;              // أجور التختيم
     totalAmountTransport: number;          // أجور النقل
     totalAmount: number;                   // المبلغ الإجمالي (مجموع ما سبق)
+    bookletPrice?: number;                 // سعر الدفتر المخصص (اختياري)
     issueDate: string;                     // تاريخ الإصدار
     createdAt: string;
     createdBy: string;
@@ -624,6 +643,35 @@ export interface PhonePayment {
     paidBy: string;                        // userId
     notes?: string;
     createdAt: string;
+}
+
+// 🤖 Automation config
+export interface AutomationConfig {
+    isEnabled: boolean;
+    runTimeHHMM: string;     // e.g. "03:00"
+    modules: {
+        banks_recon: boolean;
+        banks_liquidity: boolean;
+        restaurants_data: boolean;
+        restaurants_payments: boolean;
+        restaurants_liquidity: boolean;
+        restaurants_statements: boolean;
+        couriers_data: boolean;
+        employees_data: boolean;
+        employees_balances: boolean;
+        expenses_data: boolean;
+        expenses_pdfs: boolean;
+    };
+    workerStatus: 'idle' | 'running' | 'error' | 'asleep' | 'done' | 'preview_ready';
+    statusMessage?: string;
+    lastRun?: string;
+    lastSuccess?: string;
+    errorMessage?: string;
+    forceRunTrigger?: string; // Timestamp to trigger immediately
+    previewMode?: boolean; // When true, worker saves to pending_balances instead of system_balances
+    scrapingMethod?: 'client' | 'worker' | 'cloud';
+    cloudServerUrl?: string; // رابط خادم Render السحابي
+    apiSecret?: string; // مفتاح API للتحقق من الهوية
 }
 
 export interface TransferRequest {
@@ -761,6 +809,8 @@ export interface SystemBalance {
     difference: number;      // الفارق
     lastUpdated: string;     // آخر تحديث
     type: 'bank' | 'restaurant';  // نوع الحساب
+    pendingAt?: string;      // تاريخ السحب للمعاينة
+    approvedAt?: string;     // تاريخ الاعتماد
 }
 
 // إعدادات ربط حسابات المطابقة بأرقام حسابات النظام الأساسي
@@ -800,19 +850,25 @@ export interface OperationalSheet {
 
 export interface AppContextType {
     // Auth
-    currentUser: User | null;
-    users: User[];
+    premiumUI: boolean;
+    togglePremiumUI: () => void;
     theme: Theme;
     currency: Currency;
     colors: { positive: string; negative: string; matched: string };
     toggleTheme: () => void;
+    // Users
+    users: User[];
+    setUsers: (users: User[]) => void;
+    currentUser: User | null;
+    isAuthLoading: boolean;
     login: (username: string, password: string) => Promise<boolean>;
-    logout: () => void;
+    register: (username: string, password: string, name: string) => Promise<void>;
+    logout: () => Promise<void>;
     changePassword: (newPassword: string) => Promise<void>;
     addUser: (username: string, password: string, name: string, role: UserRole) => Promise<void>;
     deleteUser: (id: string) => void;
     toggleUserStatus: (id: string) => void;
-    updateUser: (id: string, updates: { username?: string; name?: string; password?: string; permissions?: UserPermission[] }) => Promise<boolean>;
+    updateUser: (id: string, updates: { username?: string; name?: string; password?: string; permissions?: UserPermission[]; allowedMainAccounts?: string[] }) => Promise<boolean>;
 
     // Restaurant Recon Data
     currentData: ReconData;
@@ -825,6 +881,10 @@ export interface AppContextType {
 
     // Funds / Bank Configuration
     bankDefinitions: BankDefinition[];
+    customCurrencies: AppCurrency[];
+    setCustomCurrencies: (currencies: AppCurrency[]) => void;
+    saveCustomCurrency: (currency: AppCurrency) => Promise<void>;
+    deleteCustomCurrency: (id: string) => Promise<void>;
     addBankDefinition: (name: string, currency: FundsCurrency, accountNumber?: string, customCurrencyName?: string) => void;
     toggleBankDefinition: (id: string) => void;
     updateBankDefinition: (id: string, updates: Partial<BankDefinition>) => void; // Admin+ only
@@ -945,6 +1005,10 @@ export interface AppContextType {
     // Developer Feedback Settings
     devFeedbackSettings: DevFeedbackSettings;
     updateDevFeedbackSettings: (settings: Partial<DevFeedbackSettings>) => Promise<void>;
+
+    // Automation Configuration
+    automationConfig: AutomationConfig | null;
+    updateAutomationConfig: (config: Partial<AutomationConfig>) => Promise<void>;
 
     // Feature Flags
     featureFlags: Record<string, boolean>;

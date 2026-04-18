@@ -76,8 +76,15 @@ export const useJournalEntries = (currentUser: User | null) => {
             snapshot.forEach((docSnap) => {
                 items.push({ ...docSnap.data(), id: docSnap.id } as ChartAccount);
             });
-            items.sort((a, b) => a.accountNumber.localeCompare(b.accountNumber, 'ar'));
-            setChartAccounts(items);
+            let filteredItems = items;
+            if (currentUser?.role === 'user' && currentUser.allowedMainAccounts !== undefined) {
+                 filteredItems = items.filter((acc) => {
+                     if (acc.accountType === 'main') return currentUser.allowedMainAccounts!.includes(acc.accountNumber);
+                     return currentUser.allowedMainAccounts!.includes(acc.parentAccountNumber || '');
+                 });
+            }
+            filteredItems.sort((a, b) => a.accountNumber.localeCompare(b.accountNumber, 'ar'));
+            setChartAccounts(filteredItems);
         }, (error) => {
             console.error('[useJournalEntries] Error fetching chart accounts:', error);
         });
@@ -98,8 +105,14 @@ export const useJournalEntries = (currentUser: User | null) => {
             snapshot.forEach((docSnap) => {
                 items.push({ ...docSnap.data(), id: docSnap.id } as JournalEntry);
             });
-            items.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-            setJournalEntries(items);
+            let filteredEntries = items;
+            if (currentUser?.role === 'user' && currentUser.allowedMainAccounts !== undefined) {
+                 filteredEntries = items.filter((entry) => {
+                     return entry.lines.every((line) => currentUser.allowedMainAccounts!.includes(line.accountNumber));
+                 });
+            }
+            filteredEntries.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+            setJournalEntries(filteredEntries);
         }, (error) => {
             console.error('[useJournalEntries] Error fetching journal entries:', error);
         });
@@ -159,6 +172,23 @@ export const useJournalEntries = (currentUser: User | null) => {
         await deleteDoc(docRef);
     }, []);
 
+    const deleteChartAccountsBulk = useCallback(async (ids: string[]): Promise<number> => {
+        if (!currentUser) throw new Error('يجب تسجيل الدخول');
+        const BATCH_SIZE = 450;
+        let count = 0;
+        for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+            const chunk = ids.slice(i, i + BATCH_SIZE);
+            const batch = writeBatch(db);
+            for (const id of chunk) {
+                const docRef = doc(db, ROOT_COLLECTION, DATA_PATH, 'chart_of_accounts', id);
+                batch.delete(docRef);
+                count++;
+            }
+            await batch.commit();
+        }
+        return count;
+    }, [currentUser]);
+
     // ============ JOURNAL ENTRIES CRUD ============
 
     const addJournalEntry = useCallback(async (data: Omit<JournalEntry, 'id' | 'createdAt' | 'createdBy' | 'createdByName'>): Promise<string> => {
@@ -190,6 +220,7 @@ export const useJournalEntries = (currentUser: User | null) => {
         addChartAccountsBulk,
         updateChartAccount,
         deleteChartAccount,
+        deleteChartAccountsBulk,
         addJournalEntry,
         deleteJournalEntry,
     };

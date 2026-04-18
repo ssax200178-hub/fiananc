@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAppContext } from '../AppContext';
-import type { UserRole, User, TipType, UserPermission, ExchangeRateHistory, AccountMapping, SystemBalance } from '../AppContext';
+import type { UserRole, User, TipType, UserPermission, ExchangeRateHistory, AccountMapping, SystemBalance, AppCurrency } from '../AppContext';
 import { PERMISSION_GROUPS } from '../AppContext';
 import { settingsService } from '../src/services/settingsService';
 import { confirmDialog } from '../utils/confirm';
+import PremiumSettingsPage from './PremiumSettingsPage';
+import FinancialTipsTab from './settings/FinancialTipsTab';
+import AccountSettingsTab from './settings/AccountSettingsTab';
+import ExchangeRatesTab from './settings/ExchangeRatesTab';
+import CurrenciesTab from './settings/CurrenciesTab';
+import PhoneProvidersTab from './settings/PhoneProvidersTab';
+import MappingTab from './settings/MappingTab';
 
 const parseNum = (t: string): number => {
     if (!t || t.trim() === '-' || t.trim() === '—' || t.trim() === '') return 0;
@@ -157,6 +164,7 @@ const PasteExtractorSection = ({ onSaved, syncMetadata: syncMeta }: { onSaved: (
             // Skip header/total rows
             if (!accountNumber || /^(#|رقم|رقم الحساب)$/.test(accountNumber)) continue;
             if (accountName.includes('إجمالي') || accountName.includes('الإجمالي')) continue;
+            if (accountName.includes('إضافة فرع جديد') || accountName.includes('إضافة') || accountName === '') continue;
 
             parsed.push({
                 accountNumber, accountName, name: accountName, branch, currency,
@@ -298,6 +306,9 @@ const PasteExtractorSection = ({ onSaved, syncMetadata: syncMeta }: { onSaved: (
     );
 };
 
+
+type SettingsTab = 'users' | 'tips' | 'account' | 'exchange' | 'currencies' | 'feedback' | 'experiments' | 'advanced' | 'providers' | 'mapping';
+
 const SettingsPage = () => {
     const {
         currentUser,
@@ -327,11 +338,17 @@ const SettingsPage = () => {
         saveAccountMapping,
         deleteAccountMapping,
         systemBalances,
-        syncMetadata
+        syncMetadata,
+        customCurrencies,
+        saveCustomCurrency,
+        deleteCustomCurrency,
+        chartAccounts
     } = useAppContext();
 
-    const canManageSettings = currentUser?.role === 'super_admin' || currentUser?.permissions?.includes('settings_manage');
-    const [activeTab, setActiveTab] = useState<'users' | 'tips' | 'account' | 'exchange' | 'feedback' | 'experiments' | 'advanced' | 'providers' | 'mapping'>(
+    const [usePremiumUI, setUsePremiumUI] = useState(true);
+
+    const canManageSettings = currentUser?.role === 'super_admin' || currentUser?.role === 'admin' || currentUser?.permissions?.includes('settings_manage');
+    const [activeTab, setActiveTab] = useState<SettingsTab>(
         currentUser?.role === 'user' ? 'account' : 'users'
     );
 
@@ -383,6 +400,34 @@ const SettingsPage = () => {
         setIsLoadingHistory(false);
     };
 
+    // Currency Form State
+    const [currencyForm, setCurrencyForm] = useState<Partial<AppCurrency>>({
+        name: '',
+        currencyId: 0,
+        defaultAccountId: '',
+        isActive: true
+    });
+    const [isEditingCurrency, setIsEditingCurrency] = useState(false);
+    const [currencyFormOpen, setCurrencyFormOpen] = useState(false);
+
+    const handleSaveCurrency = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await saveCustomCurrency(currencyForm as AppCurrency);
+            setCurrencyFormOpen(false);
+            setCurrencyForm({ name: '', currencyId: 0, defaultAccountId: '', isActive: true });
+            setIsEditingCurrency(false);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const handleEditCurrency = (currency: AppCurrency) => {
+        setCurrencyForm(currency);
+        setIsEditingCurrency(true);
+        setCurrencyFormOpen(true);
+    };
+
     useEffect(() => {
         setRateForm({ SAR_TO_OLD_RIAL: exchangeRates.SAR_TO_OLD_RIAL, SAR_TO_NEW_RIAL: exchangeRates.SAR_TO_NEW_RIAL });
     }, [exchangeRates]);
@@ -428,11 +473,13 @@ const SettingsPage = () => {
     const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
     // Batch permissions: accumulate changes locally, save all at once
     const [pendingPermissions, setPendingPermissions] = useState<UserPermission[] | null>(null);
+    const [pendingAllowedMainAccounts, setPendingAllowedMainAccounts] = useState<string[] | undefined>(undefined);
     const [isSavingPermissions, setIsSavingPermissions] = useState(false);
 
     const handleOpenPermissionsModal = (user: User) => {
         setUserForPermissions(user);
         setPendingPermissions(user.permissions ? [...user.permissions] : []);
+        setPendingAllowedMainAccounts(user.allowedMainAccounts ? [...user.allowedMainAccounts] : undefined);
         setIsPermissionsModalOpen(true);
     };
 
@@ -448,8 +495,8 @@ const SettingsPage = () => {
         if (!userForPermissions || !pendingPermissions) return;
         setIsSavingPermissions(true);
         try {
-            await updateUser(userForPermissions.id, { permissions: pendingPermissions });
-            setUserForPermissions({ ...userForPermissions, permissions: pendingPermissions });
+            await updateUser(userForPermissions.id, { permissions: pendingPermissions, allowedMainAccounts: pendingAllowedMainAccounts });
+            setUserForPermissions({ ...userForPermissions, permissions: pendingPermissions, allowedMainAccounts: pendingAllowedMainAccounts });
             alert('✅ تم حفظ الصلاحيات بنجاح');
         } catch (error) {
             console.error(error);
@@ -534,6 +581,22 @@ const SettingsPage = () => {
         }
     };
 
+    if (usePremiumUI) {
+        return (
+            <div className="relative">
+                <div className="absolute top-4 left-10 z-50">
+                    <button 
+                        onClick={() => setUsePremiumUI(false)}
+                        className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-xl text-xs font-bold border border-white/10 transition-all flex items-center gap-2"
+                    >
+                        <span className="material-symbols-outlined text-sm">history</span>
+                        الواجهة الكلاسيكية
+                    </button>
+                </div>
+                <PremiumSettingsPage />
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-6xl mx-auto space-y-8 pb-20">
@@ -545,7 +608,16 @@ const SettingsPage = () => {
                         {currentUser?.role === 'user' ? 'إعدادات الإدارة' : 'إدارة المستخدمين'}
                     </p>
                 </div>
-                <span className="material-symbols-outlined text-6xl text-slate-200 dark:text-slate-700">settings</span>
+                <div className="flex items-center gap-4">
+                    <button 
+                        onClick={() => setUsePremiumUI(true)}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2"
+                    >
+                        <span className="material-symbols-outlined text-sm">auto_awesome</span>
+                        الواجهة المتميزة
+                    </button>
+                    <span className="material-symbols-outlined text-6xl text-slate-200 dark:text-slate-700">settings</span>
+                </div>
             </div>
 
             {/* Tabs Navigation */}
@@ -595,6 +667,18 @@ const SettingsPage = () => {
                     >
                         <span className="material-symbols-outlined">currency_exchange</span>
                         أسعار الصرف
+                    </button>
+                )}
+                {canManageRates && (
+                    <button
+                        onClick={() => setActiveTab('currencies')}
+                        className={`px-6 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${activeTab === 'currencies'
+                            ? 'bg-[var(--color-active)] text-white shadow-md'
+                            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                            }`}
+                    >
+                        <span className="material-symbols-outlined">payments</span>
+                        إدارة العملات
                     </button>
                 )}
                 {currentUser?.role === 'super_admin' && (
@@ -1034,6 +1118,79 @@ const SettingsPage = () => {
                                                     );
                                                 })}
                                             </div>
+
+                                            {/* قسم صلاحيات الحسابات الرئيسية */}
+                                            <div className="mt-6 border-t border-slate-200 dark:border-slate-700 pt-6">
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    <span className="material-symbols-outlined text-purple-600 dark:text-purple-400 text-2xl">account_balance_wallet</span>
+                                                    <div>
+                                                        <h4 className="font-bold text-slate-900 dark:text-white">صلاحيات الحسابات الرئيسية</h4>
+                                                        <p className="text-xs text-slate-500">حدد الحسابات التي يُسمح للموظف برؤيتها وإضافتها. في حال عدم تحديد أي حساب، سيكون الوصول متاحاً للكل لتجنب تعطيل العمل.</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar p-2 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                                                    {chartAccounts
+                                                        ?.filter((a) => a.accountType === 'main')
+                                                        .map((acc) => {
+                                                            const isChecked = pendingAllowedMainAccounts === undefined || pendingAllowedMainAccounts.length === 0 || pendingAllowedMainAccounts.includes(acc.accountNumber);
+                                                            return (
+                                                                <label
+                                                                    key={acc.id}
+                                                                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${isChecked ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700/50 shadow-sm' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/80'}`}
+                                                                >
+                                                                    <div className="relative flex items-center">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            className="peer sr-only"
+                                                                            checked={isChecked}
+                                                                            onChange={(e) => {
+                                                                                if (userForPermissions.role === 'super_admin') return;
+                                                                                let current = pendingAllowedMainAccounts === undefined ? [] : [...pendingAllowedMainAccounts];
+                                                                                
+                                                                                // If toggling on, add to current list
+                                                                                if (e.target.checked) {
+                                                                                    if (!current.includes(acc.accountNumber)) current.push(acc.accountNumber);
+                                                                                } else {
+                                                                                    // If toggling off, and it was previously undefined (all true), populate with everything except this one
+                                                                                    if (pendingAllowedMainAccounts === undefined || pendingAllowedMainAccounts.length === 0) {
+                                                                                        const allMains = chartAccounts.filter((ca) => ca.accountType === 'main').map((ca) => ca.accountNumber);
+                                                                                        current = allMains.filter((num) => num !== acc.accountNumber);
+                                                                                    } else {
+                                                                                        current = current.filter((num) => num !== acc.accountNumber);
+                                                                                    }
+                                                                                }
+                                                                                setPendingAllowedMainAccounts(current);
+                                                                            }}
+                                                                            disabled={userForPermissions.role === 'super_admin'}
+                                                                        />
+                                                                        <div className="w-5 h-5 rounded border-2 border-slate-300 dark:border-slate-600 peer-checked:bg-purple-600 peer-checked:border-purple-600 transition-colors flex items-center justify-center">
+                                                                            <span className={`material-symbols-outlined text-[14px] text-white opacity-0 peer-checked:opacity-100 transition-opacity`}>check</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className={`text-sm font-bold truncate ${isChecked ? 'text-purple-900 dark:text-purple-300' : 'text-slate-700 dark:text-slate-300'}`}>{acc.accountName}</p>
+                                                                        <p className="text-[11px] text-slate-400 font-mono mt-0.5">{acc.accountNumber}</p>
+                                                                    </div>
+                                                                </label>
+                                                            );
+                                                        })}
+                                                </div>
+                                                
+                                                {/* Clear constraints button */}
+                                                {pendingAllowedMainAccounts !== undefined && pendingAllowedMainAccounts.length > 0 && (
+                                                    <div className="mt-3 flex justify-end">
+                                                        <button
+                                                            onClick={() => setPendingAllowedMainAccounts(undefined)}
+                                                            className="text-xs text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-bold flex items-center gap-1 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg transition-colors"
+                                                            disabled={userForPermissions.role === 'super_admin'}
+                                                        >
+                                                            <span className="material-symbols-outlined text-[14px]">device_reset</span>
+                                                            إلغاء التقييد (السماح للكل)
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
 
                                         <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
@@ -1412,6 +1569,158 @@ const SettingsPage = () => {
                             </button>
                         </div>
                     </div>
+                </div>
+            ) : activeTab === 'currencies' && canManageRates ? (
+                <div className="space-y-6 max-w-4xl">
+                    <div className="bg-white dark:bg-[#1e293b] rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-900/20 dark:to-emerald-900/20 flex justify-between items-center">
+                            <div>
+                                <h2 className="text-xl font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+                                    <span className="material-symbols-outlined text-teal-600 dark:text-teal-400">payments</span>
+                                    إدارة العملات المخصصة
+                                </h2>
+                                <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">إضافة العملات التي يدعمها النظام ليتم استخدامها في السندات والإيصالات.</p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setCurrencyForm({ name: '', currencyId: 0, defaultAccountId: '', isActive: true });
+                                    setIsEditingCurrency(false);
+                                    setCurrencyFormOpen(true);
+                                }}
+                                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold flex items-center gap-2 transition-all shadow-sm"
+                            >
+                                <span className="material-symbols-outlined">add</span>
+                                إضافة عملة جديدة
+                            </button>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-right">
+                                <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold text-sm">
+                                    <tr>
+                                        <th className="px-6 py-4">معرف العملة (Currency ID)</th>
+                                        <th className="px-6 py-4">الاسم (Name)</th>
+                                        <th className="px-6 py-4">الحالة</th>
+                                        <th className="px-6 py-4">الإجراءات</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                    {customCurrencies.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                                                لا توجد عملات مخصصة مضافة حالياً.
+                                            </td>
+                                        </tr>
+                                    ) : customCurrencies.map((currency) => (
+                                        <tr key={currency.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                            <td className="px-6 py-4 font-mono font-bold">{currency.currencyId}</td>
+                                            <td className="px-6 py-4">{currency.name}</td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2 py-1 rounded-md text-xs font-bold ${currency.isActive
+                                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-300'
+                                                }`}>
+                                                    {currency.isActive ? 'مفعل' : 'معطل'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => handleEditCurrency(currency)}
+                                                        className="text-blue-500 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                                                        title="تعديل"
+                                                    >
+                                                        <span className="material-symbols-outlined">edit</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => deleteCustomCurrency(currency.id)}
+                                                        className="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                        title="حذف"
+                                                    >
+                                                        <span className="material-symbols-outlined">delete</span>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* Currency Add/Edit Modal */}
+                    {currencyFormOpen && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                            <div className="bg-white dark:bg-[#1e293b] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
+                                <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900">
+                                    <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-teal-600 dark:text-teal-400">
+                                            {isEditingCurrency ? 'edit' : 'add_circle'}
+                                        </span>
+                                        {isEditingCurrency ? 'تعديل بيانات العملة' : 'إضافة عملة جديدة'}
+                                    </h3>
+                                    <button onClick={() => setCurrencyFormOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+                                        <span className="material-symbols-outlined">close</span>
+                                    </button>
+                                </div>
+                                <form onSubmit={handleSaveCurrency} className="p-6 space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">اسم العملة</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={currencyForm.name}
+                                            onChange={e => setCurrencyForm({ ...currencyForm, name: e.target.value })}
+                                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-slate-50 dark:bg-slate-900 dark:text-white"
+                                            placeholder="مثل: درهم إماراتي، جنيه مصري..."
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">معرف العملة (Currency ID)</label>
+                                        <input
+                                            type="number"
+                                            required
+                                            value={currencyForm.currencyId || ''}
+                                            onChange={e => setCurrencyForm({ ...currencyForm, currencyId: Number(e.target.value) })}
+                                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none bg-slate-50 dark:bg-slate-900 dark:text-white"
+                                            placeholder="معرف العملة في نظام سماء (مثال: 5)"
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">يجب أن يتطابق مع معرف العملة في قاعدة البيانات الأساسية.</p>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                                        <input
+                                            type="checkbox"
+                                            id="currencyActive"
+                                            checked={currencyForm.isActive !== false}
+                                            onChange={e => setCurrencyForm({ ...currencyForm, isActive: e.target.checked })}
+                                            className="w-4 h-4 text-teal-600 rounded"
+                                        />
+                                        <label htmlFor="currencyActive" className="text-sm font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                                            العملة مفعلة ومتاحة للاستخدام
+                                        </label>
+                                    </div>
+
+                                    <div className="flex justify-end gap-3 pt-6">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrencyFormOpen(false)}
+                                            className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors font-bold"
+                                        >
+                                            إلغاء
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold flex items-center gap-2 transition-all shadow-md focus:ring-4 focus:ring-teal-500/20"
+                                        >
+                                            <span className="material-symbols-outlined">{isEditingCurrency ? 'save' : 'add'}</span>
+                                            {isEditingCurrency ? 'حفظ التعديلات' : 'إضافة العملة'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
                 </div>
             ) : activeTab === 'experiments' && currentUser?.role === 'super_admin' ? (
                 <div className="space-y-5 max-w-3xl">
@@ -2017,6 +2326,9 @@ const SettingsPage = () => {
                     </div>
                 </div>
             )}
+
+
+            
             {/* Exchange Rate History Modal */}
             {showHistoryModal && (
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">

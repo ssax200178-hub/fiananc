@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Branch, ExchangeRates, DevFeedbackSettings, FeatureFlags, OperationalSheet, LiquidityMapping, LoanRequest, Employee, FinancialTip, TipType, Deduction, SystemBalance, AccountMapping, SyncMetadata } from '../../AppContext';
+import { Branch, ExchangeRates, DevFeedbackSettings, FeatureFlags, OperationalSheet, LiquidityMapping, LoanRequest, Employee, FinancialTip, TipType, Deduction, SystemBalance, AccountMapping, SyncMetadata, AppCurrency } from '../../AppContext';
 import { settingsService } from '../services/settingsService';
 import { generateId } from '../../utils';
 import { confirmDialog } from '../../utils/confirm';
+import { AutomationConfig } from '../../AppContext';
 
 export const useSettings = (currentUser: any, addLog: any, persistState: any, saveDataToFirebase: any) => {
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -12,6 +13,8 @@ export const useSettings = (currentUser: any, addLog: any, persistState: any, sa
 
     const [operationalSheets, setOperationalSheets] = useState<OperationalSheet[]>([]);
     const [liquidityMappings, setLiquidityMappings] = useState<LiquidityMapping[]>([]);
+    const [automationConfig, setAutomationConfig] = useState<AutomationConfig | null>(null);
+    const [customCurrencies, setCustomCurrencies] = useState<AppCurrency[]>([]);
 
     const [financialTips, setFinancialTips] = useState<FinancialTip[]>([]);
     const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([]);
@@ -93,6 +96,17 @@ export const useSettings = (currentUser: any, addLog: any, persistState: any, sa
         }
     };
 
+    const updateAutomationConfig = async (config: Partial<AutomationConfig>) => {
+        try {
+            const newConfig = { ...automationConfig, ...config } as AutomationConfig;
+            setAutomationConfig(newConfig); // optimistic
+            await settingsService.saveAutomationConfig(newConfig);
+            addLog('تحديث أتمتة السحب', 'تم تغيير إعدادات الأتمتة', 'settings');
+        } catch (e: any) {
+            alert(`❌ فشل تحديث الإعدادات: ${e.message}`);
+        }
+    };
+
     // Operational Sheets
     const createOperationalSheet = async (name: string, columns: string[]): Promise<string> => {
         try {
@@ -137,6 +151,23 @@ export const useSettings = (currentUser: any, addLog: any, persistState: any, sa
     const deleteLiquidityMapping = async (id: string) => {
         await settingsService.deleteLiquidityMapping(id);
         addLog('حذف مخطط السيولة', `تم حذف المخطط: ${id}`, 'settings');
+    };
+
+    // Custom Currencies
+    const saveCustomCurrency = async (currency: AppCurrency) => {
+        try {
+            const id = currency.id || generateId();
+            const dataToSave: AppCurrency = { ...currency, id, createdAt: currency.createdAt || new Date().toISOString() };
+            await settingsService.saveCustomCurrency(dataToSave);
+            addLog('إعدادات العملات', `تم حفظ العملة: ${dataToSave.name}`, 'settings');
+        } catch (e: any) { alert(`❌ فشل الحفظ: ${e.message}`); }
+    };
+    const deleteCustomCurrency = async (id: string) => {
+        if (!(await confirmDialog('تأكيد حذف هذه العملة؟', { type: 'danger' }))) return;
+        try {
+            await settingsService.deleteCustomCurrency(id);
+            addLog('إعدادات العملات', `تم حذف العملة`, 'settings');
+        } catch (e: any) { alert(`❌ فشل الحذف: ${e.message}`); }
     };
 
     // Loans
@@ -292,6 +323,7 @@ export const useSettings = (currentUser: any, addLog: any, persistState: any, sa
         exchangeRates, setExchangeRates,
         devFeedbackSettings, setDevFeedbackSettings,
         featureFlags, setFeatureFlags,
+        automationConfig, setAutomationConfig,
         operationalSheets, setOperationalSheets,
         liquidityMappings, setLiquidityMappings,
         financialTips, setFinancialTips,
@@ -301,16 +333,18 @@ export const useSettings = (currentUser: any, addLog: any, persistState: any, sa
         systemBalances, setSystemBalances,
         accountMappings, setAccountMappings,
         syncMetadata, setSyncMetadata,
+        customCurrencies, setCustomCurrencies,
 
         addBranch, updateBranch, deleteBranch,
         getExchangeRateHistory, updateExchangeRates,
-        updateDevFeedbackSettings, updateFeatureFlags,
+        updateDevFeedbackSettings, updateFeatureFlags, updateAutomationConfig,
         createOperationalSheet, updateSheetRow, deleteOperationalSheet,
         saveLiquidityMapping, deleteLiquidityMapping,
         addLoanRequest, updateLoanRequest, deleteLoanRequest, approveLoanRequest, rejectLoanRequest,
         addEmployee, updateEmployee, deleteEmployee,
         addDeduction, updateDeduction, deleteDeduction, exemptDeduction,
         addFinancialTip, updateFinancialTip, deleteFinancialTip,
-        saveAccountMapping, deleteAccountMapping
+        saveAccountMapping, deleteAccountMapping,
+        saveCustomCurrency, deleteCustomCurrency
     };
 };

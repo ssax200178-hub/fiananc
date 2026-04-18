@@ -1,21 +1,19 @@
 """
-سكربت استخراج أرصدة النظام الأساسي (tawseel.app)
-====================================================
+سكربت استخراج أرصدة النظام الأساسي (tawseel.app) V2 - النسخة المؤتمتة
+===================================================================
 يقوم بفتح Chrome عبر Selenium، والدخول لنظام tawseel.app
-لاستخراج أرصدة الحسابات البنكية والمطاعم، ثم إرسالها لـ Firestore.
-
-الاستخدام:
-1. pip install -r requirements.txt
-2. ضع ملف firebase-service-account.json في نفس المجلد
-3. python tawseel_scraper.py
+لاستخراج أرصدة: البنوك، المطاعم، الموظفين، والموصلين.
+يدعم وضع "الخدمة" (Background Service) للاستجابة للأوامر من الموقع تلقائياً.
 """
 
 import tkinter as tk
-from tkinter import scrolledtext, messagebox, filedialog
+from tkinter import ttk, scrolledtext, messagebox, filedialog
 import threading
 import json
 import os
 import time
+import calendar
+import base64
 from datetime import datetime
 
 # ============================================================
@@ -34,7 +32,6 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# Optional imports for fallback browsers
 try:
     from selenium.webdriver.edge.service import Service as EdgeService
     from selenium.webdriver.edge.options import Options as EdgeOptions
@@ -52,625 +49,530 @@ except ImportError:
 # Configuration
 # ============================================================
 FIREBASE_PROJECT_ID = "financial-tawseelone"
-ROOT_COLLECTION = "app"        # Production. Change to "app_staging" for testing
+ROOT_COLLECTION = "app"
 DATA_PATH = "v1_data"
 
-BANK_REPORT_URL = (
+REPORT_URL_TEMPLATE = (
     "https://tawseel.app/admin/accounting/report/monthly"
     "?branch%5B%5D=tenant.*&accounting_types=0&financial_statement=0"
     "&currency=-1&clause=-1&entry_type=-1"
     "&fromdate={from_date}&todate={to_date}"
-    "&account=6000&all_branch=0&cost_center=-1"
+    "&account={account}&all_branch=0&cost_center=-1"
 )
 
-RESTAURANT_REPORT_URL = (
-    "https://tawseel.app/admin/accounting/report/monthly"
-    "?branch%5B%5D=tenant.*&accounting_types=0&financial_statement=0"
-    "&currency=-1&clause=-1&entry_type=-1"
-    "&fromdate={from_date}&todate={to_date}"
-    "&account=2000&all_branch=0&cost_center=-1"
+STATEMENT_URL_TEMPLATE = (
+    "https://tawseel.app/admin/accounting/statement/market"
+    "?fromdata={start_date}&todate={end_date}"
+    "&posting=-1&entry_type=-1&report=0&pamount=1&market={market_id}"
 )
 
 LOGIN_URL = "https://tawseel.app/login"
 
-# Chrome paths to search on Windows
-CHROME_PATHS = [
-    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-    os.path.join(os.environ.get("LOCALAPPDATA", ""), r"Google\Chrome\Application\chrome.exe"),
-]
-
-
 class TawseelScraper:
-    """Main scraper class with tkinter GUI."""
-
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("مستخرج أرصدة توصيل - Tawseel Balance Extractor")
-        self.root.geometry("850x700")
+        self.root.title("Tawseel Automation V2 - نظام الأتمتة الشامل")
+        self.root.geometry("900x800")
         self.root.configure(bg="#0f172a")
 
         self.driver = None
         self.db = None
-        self.bank_data = []
-        self.restaurant_data = []
+        self.is_service_running = False
+        self.listener = None
+        self.last_handled_trigger = None
+        self.headless_var = tk.BooleanVar(value=True) # Run hidden by default
+        
+        # Scraped Data
+        self.data_store = {
+            "bank": [],        # 6000
+            "restaurant": [],  # 2000
+            "driver": [],      # 3000
+            "employee": []     # 25000
+        }
 
+        self._apply_styles()
         self._build_ui()
+
+    def _apply_styles(self):
+        style = ttk.Style()
+        style.theme_use('default')
+        style.configure("TNotebook", background="#0f172a", borderwidth=0)
+        style.configure("TNotebook.Tab", background="#1e293b", foreground="#cbd5e1", padding=[15, 8], font=("Segoe UI", 10, "bold"))
+        style.map("TNotebook.Tab", background=[("selected", "#38bdf8")], foreground=[("selected", "white")])
+        style.configure("TFrame", background="#0f172a")
+        style.configure("Header.TLabel", background="#0f172a", foreground="#38bdf8", font=("Segoe UI", 16, "bold"))
 
     # ============================================================
     # UI Construction
     # ============================================================
     def _build_ui(self):
-        """Build the tkinter interface."""
-        # Header
-        header = tk.Frame(self.root, bg="#1e293b", pady=12)
-        header.pack(fill="x")
-        tk.Label(
-            header, text="🔄 مستخرج أرصدة توصيل",
-            font=("Segoe UI", 18, "bold"), fg="#38bdf8", bg="#1e293b"
-        ).pack()
-        tk.Label(
-            header, text="Tawseel Balance Extractor → Firestore",
-            font=("Segoe UI", 10), fg="#94a3b8", bg="#1e293b"
-        ).pack()
+        header = ttk.Label(self.root, text="🔄 مستخرج بيانات توصيل المتكامل (Scraper V2)", style="Header.TLabel", justify="center")
+        header.pack(pady=15)
 
-        # Firebase Service Account
-        fb_frame = tk.LabelFrame(
-            self.root, text="🔑 إعداد Firebase",
-            font=("Segoe UI", 10, "bold"), fg="#e2e8f0", bg="#1e293b",
-            labelanchor="ne", padx=10, pady=5
-        )
-        fb_frame.pack(fill="x", padx=15, pady=(10, 5))
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill="both", expand=True, padx=15, pady=5)
 
-        self.sa_path_var = tk.StringVar(value="")
-        sa_path_frame = tk.Frame(fb_frame, bg="#1e293b")
-        sa_path_frame.pack(fill="x")
-        tk.Entry(
-            sa_path_frame, textvariable=self.sa_path_var,
-            font=("Consolas", 9), bg="#0f172a", fg="#e2e8f0",
-            insertbackground="#38bdf8", relief="flat", bd=0
-        ).pack(side="right", fill="x", expand=True, ipady=4, padx=(5, 0))
-        tk.Button(
-            sa_path_frame, text="📂 اختر ملف SA",
-            font=("Segoe UI", 9, "bold"), bg="#334155", fg="white",
-            activebackground="#475569", relief="flat",
-            command=self._pick_sa_file
-        ).pack(side="left")
+        # Tabs
+        self.tab_automation = ttk.Frame(self.notebook) # New Primary Tab
+        self.tab_settings = ttk.Frame(self.notebook)
+        self.tab_restaurants = ttk.Frame(self.notebook)
+        self.tab_banks = ttk.Frame(self.notebook)
+        self.tab_staff = ttk.Frame(self.notebook)
+        self.tab_sync = ttk.Frame(self.notebook)
 
-        tk.Button(
-            fb_frame, text="🔗 اتصال بـ Firestore",
-            font=("Segoe UI", 10, "bold"), bg="#059669", fg="white",
-            activebackground="#047857", relief="flat", pady=4,
-            command=lambda: self._run_async(self._connect_firebase)
-        ).pack(fill="x", pady=(5, 0))
+        self.notebook.add(self.tab_automation, text="🤖 الأتمتة المباشرة")
+        self.notebook.add(self.tab_settings, text="⚙️ الإعدادات")
+        self.notebook.add(self.tab_restaurants, text="🍽️ المطاعم")
+        self.notebook.add(self.tab_banks, text="🏦 البنوك")
+        self.notebook.add(self.tab_staff, text="👥 الموظفين")
+        self.notebook.add(self.tab_sync, text="☁️ المزامنة")
 
-        # Date Range
-        date_frame = tk.LabelFrame(
-            self.root, text="📅 نطاق التقرير",
-            font=("Segoe UI", 10, "bold"), fg="#e2e8f0", bg="#1e293b",
-            labelanchor="ne", padx=10, pady=5
-        )
-        date_frame.pack(fill="x", padx=15, pady=5)
+        self._build_automation_tab()
+        self._build_settings_tab()
+        self._build_restaurants_tab()
+        self._build_banks_tab()
+        self._build_staff_tab()
+        self._build_sync_tab()
 
-        dates_inner = tk.Frame(date_frame, bg="#1e293b")
-        dates_inner.pack(fill="x")
-
-        tk.Label(dates_inner, text="من:", font=("Segoe UI", 9), fg="#94a3b8", bg="#1e293b").pack(side="right")
-        self.from_date_var = tk.StringVar(value=f"{datetime.now().year}-01-01")
-        tk.Entry(
-            dates_inner, textvariable=self.from_date_var, width=12,
-            font=("Consolas", 10), bg="#0f172a", fg="#e2e8f0",
-            insertbackground="#38bdf8", relief="flat"
-        ).pack(side="right", padx=5, ipady=3)
-
-        tk.Label(dates_inner, text="إلى:", font=("Segoe UI", 9), fg="#94a3b8", bg="#1e293b").pack(side="right", padx=(15, 0))
-        self.to_date_var = tk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
-        tk.Entry(
-            dates_inner, textvariable=self.to_date_var, width=12,
-            font=("Consolas", 10), bg="#0f172a", fg="#e2e8f0",
-            insertbackground="#38bdf8", relief="flat"
-        ).pack(side="right", padx=5, ipady=3)
-
-        # Action Buttons
-        btn_frame = tk.Frame(self.root, bg="#0f172a")
-        btn_frame.pack(fill="x", padx=15, pady=10)
-
-        buttons = [
-            ("1️⃣ فتح المتصفح وتسجيل الدخول", "#3b82f6", self._step_login),
-            ("2️⃣ استخراج أرصدة البنوك (6000)", "#8b5cf6", self._step_extract_banks),
-            ("3️⃣ استخراج أرصدة المطاعم (2000)", "#f59e0b", self._step_extract_restaurants),
-            ("4️⃣ إرسال البيانات إلى Firestore", "#10b981", self._step_send_to_firestore),
-        ]
-
-        for text, color, cmd in buttons:
-            tk.Button(
-                btn_frame, text=text,
-                font=("Segoe UI", 11, "bold"), bg=color, fg="white",
-                activebackground=color, relief="flat", pady=6,
-                command=lambda c=cmd: self._run_async(c)
-            ).pack(fill="x", pady=2)
-
-        # Status Labels
-        status_frame = tk.Frame(self.root, bg="#0f172a")
-        status_frame.pack(fill="x", padx=15)
-
-        self.bank_status = tk.StringVar(value="البنوك: —")
-        self.rest_status = tk.StringVar(value="المطاعم: —")
-        self.fb_status = tk.StringVar(value="Firebase: غير متصل")
-
-        for var, color in [(self.fb_status, "#f97316"), (self.bank_status, "#a78bfa"), (self.rest_status, "#fbbf24")]:
-            tk.Label(
-                status_frame, textvariable=var,
-                font=("Segoe UI", 9, "bold"), fg=color, bg="#0f172a", anchor="e"
-            ).pack(fill="x")
-
-        # Log Area
+        # Shared Log Area at the bottom
         log_frame = tk.LabelFrame(
             self.root, text="📋 سجل العمليات",
             font=("Segoe UI", 10, "bold"), fg="#e2e8f0", bg="#1e293b",
             labelanchor="ne", padx=5, pady=5
         )
-        log_frame.pack(fill="both", expand=True, padx=15, pady=(5, 15))
+        log_frame.pack(fill="both", expand=False, padx=15, pady=10, side="bottom")
 
         self.log_text = scrolledtext.ScrolledText(
-            log_frame, font=("Consolas", 9), bg="#0f172a", fg="#cbd5e1",
-            insertbackground="#38bdf8", relief="flat", wrap="word",
-            state="disabled"
+            log_frame, font=("Consolas", 9), bg="#050505", fg="#10b981",
+            insertbackground="white", relief="flat", wrap="word", height=12, state="disabled"
         )
         self.log_text.pack(fill="both", expand=True)
 
+    def _create_action_btn(self, parent, text, color, command):
+        return tk.Button(
+            parent, text=text, font=("Segoe UI", 10, "bold"), bg=color, fg="white",
+            activebackground=color, relief="flat", pady=8, cursor="hand2",
+            command=lambda: self._run_async(command)
+        )
+
+    def _build_automation_tab(self):
+        frame = self.tab_automation
+        
+        status_frame = tk.LabelFrame(
+            frame, text="📡 حالة خدمة الأتمتة (Background Service)",
+            font=("Segoe UI", 10, "bold"), fg="#e2e8f0", bg="#1e293b", labelanchor="ne", padx=15, pady=20
+        )
+        status_frame.pack(fill="x", padx=20, pady=20)
+        
+        self.service_status_label = tk.Label(status_frame, text="الخدمة: 🔴 متوقفة", font=("Segoe UI", 12, "bold"), fg="#ef4444", bg="#1e293b")
+        self.service_status_label.pack(pady=10)
+        
+        tk.Checkbutton(status_frame, text="تشغيل المتصفح في الخلفية (Headless Mode)", variable=self.headless_var, 
+                       bg="#1e293b", fg="white", selectcolor="#0f172a", activebackground="#1e293b", activeforeground="white").pack(pady=5)
+
+        self.btn_toggle_service = tk.Button(
+            status_frame, text="✅ تشغيل خدمة الاستماع للطلبات", 
+            font=("Segoe UI", 11, "bold"), bg="#10b981", fg="white", relief="flat", pady=10, cursor="hand2",
+            command=self._toggle_service
+        )
+        self.btn_toggle_service.pack(fill="x", pady=10)
+        
+        info = tk.Label(frame, text="عند تشغيل الخدمة، سيقوم هذا البرنامج بمراقبة الموقع تلقائياً.\nبمجرد ضغطك على 'سحب فوري' من الموقع، سيبدأ السحب فوراً.", 
+                        fg="#94a3b8", bg="#0f172a", font=("Segoe UI", 10), justify="center")
+        info.pack(pady=10)
+        
+        # Dashboard like stats
+        stats_frame = tk.Frame(frame, bg="#0f172a")
+        stats_frame.pack(fill="x", padx=20, pady=10)
+        
+        self.last_run_label = tk.Label(stats_frame, text="آخر سحب: لا يوجد", fg="#cbd5e1", bg="#0f172a", font=("Segoe UI", 9))
+        self.last_run_label.pack(side="right")
+
+    def _build_settings_tab(self):
+        frame = self.tab_settings
+        
+        # Date Range Settings
+        date_frame = tk.LabelFrame(
+            frame, text="📅 الفترة المالية الأساسية",
+            font=("Segoe UI", 10, "bold"), fg="#e2e8f0", bg="#1e293b", labelanchor="ne", padx=15, pady=10
+        )
+        date_frame.pack(fill="x", padx=20, pady=10)
+        
+        dates_inner = tk.Frame(date_frame, bg="#1e293b")
+        dates_inner.pack(fill="x")
+        
+        self.from_date_var = tk.StringVar(value=f"{datetime.now().year}-01-01")
+        tk.Entry(dates_inner, textvariable=self.from_date_var, font=("Consolas", 10), width=15).pack(side="right", padx=5)
+        tk.Label(dates_inner, text="من:", fg="white", bg="#1e293b").pack(side="right")
+        
+        self.to_date_var = tk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
+        tk.Entry(dates_inner, textvariable=self.to_date_var, font=("Consolas", 10), width=15).pack(side="right", padx=(20, 5))
+        tk.Label(dates_inner, text="إلى:", fg="white", bg="#1e293b").pack(side="right")
+
+        # Firebase Settings
+        fb_frame = tk.LabelFrame(
+            frame, text="🔑 إعدادات Firebase",
+            font=("Segoe UI", 10, "bold"), fg="#e2e8f0", bg="#1e293b", labelanchor="ne", padx=15, pady=10
+        )
+        fb_frame.pack(fill="x", padx=20, pady=5)
+        
+        self.sa_path_var = tk.StringVar()
+        # Auto-detect service account
+        default_sa = os.path.join(os.path.dirname(__file__), "firebase-service-account.json")
+        if os.path.exists(default_sa): self.sa_path_var.set(default_sa)
+        
+        sa_inner = tk.Frame(fb_frame, bg="#1e293b")
+        sa_inner.pack(fill="x", pady=5)
+        tk.Entry(sa_inner, textvariable=self.sa_path_var, font=("Consolas", 9), width=50).pack(side="right", padx=10)
+        tk.Button(sa_inner, text="الملف 📂", command=self._pick_sa_file, bg="#475569", fg="white").pack(side="right")
+        self._create_action_btn(fb_frame, "اتصال بمسار Firebase", "#059669", self._connect_firebase).pack(fill="x", pady=5)
+
+        # Login action
+        self._create_action_btn(frame, "🌐 فتح المتصفح لتسجيل الدخول يدوياً (اختياري)", "#2563eb", self._step_login).pack(fill="x", padx=20, pady=10)
+
+    def _build_restaurants_tab(self):
+        frame = self.tab_restaurants
+        self._create_action_btn(frame, "🔽 سحب بيانات المطاعم (2000)", "#f59e0b", lambda: self._step_extract_data("2000", "restaurant")).pack(fill="x", padx=20, pady=10)
+        self.rest_status = tk.Label(frame, text="المطاعم المسحوبة: 0", font=("Segoe UI", 11, "bold"), fg="#fcd34d", bg="#0f172a")
+        self.rest_status.pack(pady=10)
+
+    def _build_banks_tab(self):
+        frame = self.tab_banks
+        self._create_action_btn(frame, "🏦 سحب بيانات البنوك (6000)", "#8b5cf6", lambda: self._step_extract_data("6000", "bank")).pack(fill="x", padx=20, pady=10)
+        self.bank_status = tk.Label(frame, text="البنوك المسحوبة: 0", font=("Segoe UI", 11, "bold"), fg="#c4b5fd", bg="#0f172a")
+        self.bank_status.pack(pady=10)
+
+    def _build_staff_tab(self):
+        frame = self.tab_staff
+        self._create_action_btn(frame, "👥 سحب أرصدة الموظفين (25000)", "#0891b2", lambda: self._step_extract_data("25000", "employee")).pack(fill="x", padx=20, pady=5)
+        self.emp_status = tk.Label(frame, text="الموظفين: 0", font=("Segoe UI", 11, "bold"), fg="#67e8f9", bg="#0f172a")
+        self.emp_status.pack(pady=5)
+        self._create_action_btn(frame, "🛵 سحب أرصدة الموصلين (3000)", "#4f46e5", lambda: self._step_extract_data("3000", "driver")).pack(fill="x", padx=20, pady=5)
+        self.drv_status = tk.Label(frame, text="الموصلين: 0", font=("Segoe UI", 11, "bold"), fg="#a5b4fc", bg="#0f172a")
+        self.drv_status.pack(pady=5)
+
+    def _build_sync_tab(self):
+        frame = self.tab_sync
+        self._create_action_btn(frame, "🚀 مزامنة كافة البيانات إلى Firestore", "#10b981", self._step_send_to_firestore).pack(fill="x", padx=20, pady=10)
+        self.fb_status = tk.Label(frame, text="حالة الرفع: بانتظار أمرك", font=("Segoe UI", 11), fg="#6ee7b7", bg="#0f172a")
+        self.fb_status.pack(pady=10)
+
     # ============================================================
-    # Utility Methods
+    # Automation Service Logic
+    # ============================================================
+    def _toggle_service(self):
+        if self.is_service_running:
+            self._log("🛑 جاري إيقاف الخدمة...")
+            self.is_service_running = False
+            if self.listener: 
+                try: self.listener.unsubscribe()
+                except: pass
+            self.service_status_label.config(text="الخدمة: 🔴 متوقفة", fg="#ef4444")
+            self.btn_toggle_service.config(text="✅ تشغيل خدمة الاستماع للطلبات", bg="#10b981")
+        else:
+            if not self.db: self._connect_firebase()
+            if not self.db: 
+                messagebox.showerror("خطأ", "يجب الاتصال بـ Firebase أولاً!")
+                return
+                
+            self._log("📡 تم بدء خدمة الاستماع للطلبات من الموقع...")
+            self.is_service_running = True
+            self.service_status_label.config(text="الخدمة: 🟢 تعمل وبانتظار طلبات الموقع", fg="#10b981")
+            self.btn_toggle_service.config(text="🛑 إيقاف خدمة الاستماع", bg="#ef4444")
+            
+            # Start listener in a background thread
+            doc_ref = self.db.collection(ROOT_COLLECTION).document(DATA_PATH).collection("settings").document("automation_config")
+            self.listener = doc_ref.on_snapshot(self._on_firestore_change)
+
+    def _on_firestore_change(self, doc_snapshot, changes, read_time):
+        if not self.is_service_running: return
+        
+        for doc in doc_snapshot:
+            data = doc.to_dict()
+            if not data: continue
+            
+            trigger = data.get("forceRunTrigger")
+            status = data.get("workerStatus")
+            
+            # If there's a new trigger we haven't handled yet
+            if trigger and trigger != self.last_handled_trigger and status != "done":
+                self._log(f"🔔 تم رصد طلب سحب جديد من الموقع! (ID: {trigger[:8]})")
+                self.last_handled_trigger = trigger
+                # Update status to running immediately
+                doc.reference.update({"workerStatus": "running", "statusMessage": "جاري التحميل..."})
+                # Run the actual work in a separate thread so listener stays active
+                self._run_async(lambda: self._automated_full_run(trigger))
+
+    def _automated_full_run(self, trigger_id):
+        try:
+            self._log("🤖 بدء التشغيل الآلي الشامل...")
+            self._update_remote_status("running", "جاري فتح المتصفح والدخول...")
+            
+            # 1. Login (Headless or not)
+            success = self._step_login(automated=True)
+            if not success: raise Exception("فشل فتح المتصفح أو الدخول")
+            
+            # 2. Extract Each Category
+            categories = [
+                ("6000", "البنوك", "bank"),
+                ("2000", "المطاعم", "restaurant"),
+                ("3000", "الموصلين", "driver"),
+                ("25000", "الموظفين", "employee")
+            ]
+            
+            for code, name, key in categories:
+                self._update_remote_status("running", f"جاري استخراج {name}...")
+                self._log(f"🔄 جاري سحب {name}...")
+                self._step_extract_data(code, key)
+                time.sleep(2)
+            
+            # 3. Sync to Firestore
+            self._update_remote_status("running", "جاري رفع البيانات إلى Firestore...")
+            self._log("🚀 جاري مزامنة النتائج...")
+            self._step_send_to_firestore()
+            
+            # 4. Final Success Update
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self._update_remote_status("done", "اكتمل بنجاح", {
+                "lastRun": datetime.now().isoformat(),
+                "lastSuccess": datetime.now().isoformat(),
+                "errorMessage": ""
+            })
+            self.last_run_label.config(text=f"آخر سحب: {now_str}")
+            self._log("✨ انتهى التشغيل الآلي الشامل بنجاح.")
+            
+            # Close driver if headless
+            if self.headless_var.get() and self.driver:
+                self.driver.quit()
+                self.driver = None
+                
+        except Exception as e:
+            self._log(f"⚠️ فشل التشغيل الآلي: {e}")
+            self._update_remote_status("error", f"خطأ: {str(e)}", {"errorMessage": str(e)})
+
+    def _update_remote_status(self, status, message, extra=None):
+        if not self.db: return
+        payload = {"workerStatus": status, "statusMessage": message}
+        if extra: payload.update(extra)
+        
+        doc_ref = self.db.collection(ROOT_COLLECTION).document(DATA_PATH).collection("settings").document("automation_config")
+        doc_ref.update(payload)
+
+    # ============================================================
+    # Utilities
     # ============================================================
     def _log(self, msg: str):
-        """Thread-safe logging to the text area."""
         timestamp = datetime.now().strftime("%H:%M:%S")
-
         def _update():
             self.log_text.configure(state="normal")
             self.log_text.insert("end", f"[{timestamp}] {msg}\n")
             self.log_text.see("end")
             self.log_text.configure(state="disabled")
-
         self.root.after(0, _update)
 
     def _run_async(self, func):
-        """Run a function in a background thread."""
-        thread = threading.Thread(target=func, daemon=True)
-        thread.start()
+        threading.Thread(target=func, daemon=True).start()
 
     def _pick_sa_file(self):
-        """Open file dialog to pick Firebase Service Account JSON."""
-        path = filedialog.askopenfilename(
-            title="اختر ملف Service Account JSON",
-            filetypes=[("JSON Files", "*.json")],
-            initialdir=os.path.dirname(os.path.abspath(__file__))
-        )
+        path = filedialog.askopenfilename(title="اختر ملف حساب الخدمة", filetypes=[("JSON Files", "*.json")])
         if path:
             self.sa_path_var.set(path)
-            self._log(f"📂 تم اختيار ملف SA: {os.path.basename(path)}")
 
     def _parse_number(self, text: str) -> float:
-        """Convert Arabic/English number string to float."""
-        if not text or text.strip() in ("-", "—", ""):
-            return 0.0
-        # Remove commas and spaces
+        if not text or text.strip() in ("-", "—", ""): return 0.0
         cleaned = text.strip().replace(",", "").replace("٬", "").replace(" ", "")
-        
-        # Check for negative signs
         is_negative = False
         if cleaned.startswith("(") and cleaned.endswith(")"):
-            is_negative = True
-            cleaned = cleaned[1:-1]
+            is_negative, cleaned = True, cleaned[1:-1]
         elif cleaned.endswith("-"):
-            is_negative = True
-            cleaned = cleaned[:-1]
+            is_negative, cleaned = True, cleaned[:-1]
         elif cleaned.startswith("-"):
-            is_negative = True
-            cleaned = cleaned[1:]
-            
+            is_negative, cleaned = True, cleaned[1:]
         try:
             val = float(cleaned)
             return -val if is_negative else val
         except ValueError:
             return 0.0
 
+    def _get_statement_dates(self):
+        today = datetime.now()
+        if today.day <= 15:
+            year, month = today.year, today.month - 1
+            if month == 0: year, month = year - 1, 12
+            start_date = f"{year}-{month:02d}-16"
+            last_day = calendar.monthrange(year, month)[1]
+            end_date = f"{year}-{month:02d}-{last_day}"
+        else:
+            start_date = f"{today.year}-{today.month:02d}-01"
+            end_date = f"{today.year}-{today.month:02d}-15"
+        return start_date, end_date
+
     # ============================================================
-    # Firebase Connection
+    # Firebase
     # ============================================================
     def _connect_firebase(self):
-        """Initialize Firebase Admin SDK."""
         sa_path = self.sa_path_var.get().strip()
-        if not sa_path:
-            # Try default path
-            sa_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "firebase-service-account.json")
-            if not os.path.exists(sa_path):
-                self._log("❌ لم يتم تحديد ملف Service Account!")
-                messagebox.showerror("خطأ", "يرجى اختيار ملف Service Account JSON أو وضعه في نفس المجلد بإسم firebase-service-account.json")
-                return
-
         try:
             if not firebase_admin._apps:
-                cred = credentials.Certificate(sa_path)
-                firebase_admin.initialize_app(cred, {"projectId": FIREBASE_PROJECT_ID})
-
+                firebase_admin.initialize_app(credentials.Certificate(sa_path), {"projectId": FIREBASE_PROJECT_ID})
             self.db = firestore.client()
-            self.fb_status.set("Firebase: ✅ متصل")
-            self._log(f"✅ تم الاتصال بـ Firebase ({FIREBASE_PROJECT_ID})")
-            self._log(f"📁 المسار: {ROOT_COLLECTION}/{DATA_PATH}/")
+            self._log(f"✅ متصل بـ Firebase: {FIREBASE_PROJECT_ID}")
+            self.fb_status.config(text="Firebase: متصل")
         except Exception as e:
-            self._log(f"❌ فشل الاتصال بـ Firebase: {e}")
-            messagebox.showerror("خطأ Firebase", str(e))
+            self._log(f"❌ خطأ Firebase: {e}")
 
     # ============================================================
-    # Step 1: Open Browser & Login (Multi-strategy)
+    # Browser
     # ============================================================
-    def _step_login(self):
-        """Open browser and navigate to login page. Tries multiple strategies."""
-        self._log("🌐 جاري البحث عن متصفح متاح...")
-
-        # Strategy 1: Chrome with Selenium's built-in auto-detection
-        if self._try_chrome_auto():
-            return
-
-        # Strategy 2: Chrome with webdriver-manager
-        if self._try_chrome_wdm():
-            return
-
-        # Strategy 3: Chrome with explicit binary path
-        if self._try_chrome_explicit():
-            return
-
-        # Strategy 4: Microsoft Edge fallback
-        if self._try_edge():
-            return
-
-        self._log("❌ فشل فتح أي متصفح! تأكد من تثبيت Chrome أو Edge")
-        messagebox.showerror("خطأ", "لم يتم العثور على متصفح متوافق.\nيرجى تثبيت Google Chrome أو Microsoft Edge.")
-
-    def _configure_after_open(self):
-        """Common setup after browser opens successfully."""
-        try:
-            self.driver.execute_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-            )
-        except Exception:
-            pass
-        self.driver.get(LOGIN_URL)
-        self._log("🔑 تم فتح صفحة تسجيل الدخول")
-        self._log("⚠️ سجل الدخول يدوياً (قد يظهر CAPTCHA)")
-        self._log("   بعد تسجيل الدخول بنجاح ← اضغط الزر التالي")
-
-    def _try_chrome_auto(self) -> bool:
-        """Strategy 1: Let Selenium auto-detect Chrome + ChromeDriver."""
-        self._log("🔍 محاولة 1: Chrome (اكتشاف تلقائي)...")
-        try:
-            options = ChromeOptions()
-            options.add_argument("--start-maximized")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            options.add_experimental_option("useAutomationExtension", False)
-
-            self.driver = webdriver.Chrome(options=options)
-            self._log("✅ تم فتح Chrome (اكتشاف تلقائي)")
-            self._configure_after_open()
-            return True
-        except Exception as e:
-            self._log(f"   ⚠️ فشل: {str(e)[:100]}")
-            return False
-
-    def _try_chrome_wdm(self) -> bool:
-        """Strategy 2: Chrome with webdriver-manager to download correct driver."""
-        if not WDM_AVAILABLE:
-            return False
-        self._log("🔍 محاولة 2: Chrome (webdriver-manager)...")
-        try:
-            options = ChromeOptions()
-            options.add_argument("--start-maximized")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            options.add_experimental_option("useAutomationExtension", False)
-
-            service = ChromeService(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=options)
-            self._log("✅ تم فتح Chrome (webdriver-manager)")
-            self._configure_after_open()
-            return True
-        except Exception as e:
-            self._log(f"   ⚠️ فشل: {str(e)[:100]}")
-            return False
-
-    def _try_chrome_explicit(self) -> bool:
-        """Strategy 3: Chrome with explicit binary path."""
-        self._log("🔍 محاولة 3: Chrome (مسار يدوي)...")
-        chrome_path = None
-        for path in CHROME_PATHS:
-            if os.path.exists(path):
-                chrome_path = path
-                break
-
-        if not chrome_path:
-            self._log("   ⚠️ لم يتم العثور على Chrome في المسارات المعروفة")
-            return False
-
-        try:
-            self._log(f"   📂 وجد Chrome: {chrome_path}")
-            options = ChromeOptions()
-            options.binary_location = chrome_path
-            options.add_argument("--start-maximized")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            options.add_experimental_option("useAutomationExtension", False)
-
-            self.driver = webdriver.Chrome(options=options)
-            self._log("✅ تم فتح Chrome (مسار يدوي)")
-            self._configure_after_open()
-            return True
-        except Exception as e:
-            self._log(f"   ⚠️ فشل: {str(e)[:100]}")
-            return False
-
-    def _try_edge(self) -> bool:
-        """Strategy 4: Microsoft Edge as fallback."""
-        if not EDGE_AVAILABLE:
-            return False
-        self._log("🔍 محاولة 4: Microsoft Edge (بديل)...")
-        try:
-            options = EdgeOptions()
-            options.add_argument("--start-maximized")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            options.add_experimental_option("useAutomationExtension", False)
-
-            self.driver = webdriver.Edge(options=options)
-            self._log("✅ تم فتح Microsoft Edge كبديل")
-            self._configure_after_open()
-            return True
-        except Exception as e:
-            self._log(f"   ⚠️ فشل Edge: {str(e)[:100]}")
-            return False
-
-    # ============================================================
-    # Step 2: Extract Bank Balances (account=6000)
-    # ============================================================
-    def _step_extract_banks(self):
-        """Navigate to bank report and extract data."""
-        if not self.driver:
-            self._log("❌ Chrome غير مفتوح! اضغط الزر الأول أولاً")
-            return
-
-        from_date = self.from_date_var.get().strip()
-        to_date = self.to_date_var.get().strip()
-        url = BANK_REPORT_URL.format(from_date=from_date, to_date=to_date)
-
-        self._log(f"🏦 جاري فتح تقرير البنوك...")
-        self._log(f"   من: {from_date}  →  إلى: {to_date}")
-
-        try:
-            self.driver.get(url)
-            self.bank_data = self._extract_table_data("bank")
-            count = len(self.bank_data)
-            self.bank_status.set(f"البنوك: ✅ {count} حساب")
-            self._log(f"✅ تم استخراج {count} حساب بنكي")
-
-            # Log first few items
-            for item in self.bank_data[:5]:
-                self._log(f"   📊 {item['accountNumber']} | {item['accountName']} | مدين: {item['debit']:,.0f} | دائن: {item['credit']:,.0f}")
-            if count > 5:
-                self._log(f"   ... و {count - 5} حساب آخر")
-
-        except Exception as e:
-            self._log(f"❌ فشل استخراج البنوك: {e}")
-
-    # ============================================================
-    # Step 3: Extract Restaurant Balances (account=2000)
-    # ============================================================
-    def _step_extract_restaurants(self):
-        """Navigate to restaurant report and extract data."""
-        if not self.driver:
-            self._log("❌ Chrome غير مفتوح! اضغط الزر الأول أولاً")
-            return
-
-        from_date = self.from_date_var.get().strip()
-        to_date = self.to_date_var.get().strip()
-        url = RESTAURANT_REPORT_URL.format(from_date=from_date, to_date=to_date)
-
-        self._log(f"🍽️ جاري فتح تقرير المطاعم...")
-        self._log(f"   من: {from_date}  →  إلى: {to_date}")
-
-        try:
-            self.driver.get(url)
-            self.restaurant_data = self._extract_table_data("restaurant")
-            count = len(self.restaurant_data)
-            self.rest_status.set(f"المطاعم: ✅ {count} مطعم")
-            self._log(f"✅ تم استخراج {count} حساب مطعم")
-
-            for item in self.restaurant_data[:5]:
-                self._log(f"   📊 {item['accountNumber']} | {item['accountName']} | مدين: {item['debit']:,.0f}")
-            if count > 5:
-                self._log(f"   ... و {count - 5} مطعم آخر")
-
-        except Exception as e:
-            self._log(f"❌ فشل استخراج المطاعم: {e}")
-
-    # ============================================================
-    # Core: Extract Table Data from Page
-    # ============================================================
-    def _extract_table_data(self, data_type: str) -> list:
-        """
-        Wait for the report table to load, then extract rows.
+    def _step_login(self, automated=False):
+        options = ChromeOptions()
+        if automated and self.headless_var.get():
+            options.add_argument("--headless")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--window-size=1920,1080")
+            
+        options.add_argument("--start-maximized")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
         
-        Expected table columns (may vary, we use index-based extraction):
-        0: # (رقم)
-        1: اسم الحساب
-        2: رقم الحساب
-        3: القائمة المالية (skip)
-        4: رئيسي1 (skip)
-        5: رئيسي2 (skip)
-        6: الفرع
-        7: رئيسي4 (skip)
-        8: عملة الحساب (skip)
-        9: العملة
-        10: مركز التكلفة (skip)
-        11: مدين
-        12: دائن
-        13: الرصيد
-        """
-        self._log("⏳ انتظار تحميل الجدول (30 ثانية كحد أقصى)...")
-
-        # Wait for table to appear
-        wait = WebDriverWait(self.driver, 30)
         try:
-            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "table tbody tr")))
-        except Exception:
-            self._log("⏳ الجدول لم يظهر بعد. محاولة الانتظار أكثر...")
-            time.sleep(5)
+            if WDM_AVAILABLE:
+                service = ChromeService(ChromeDriverManager().install())
+                self.driver = webdriver.Chrome(service=service, options=options)
+            else:
+                self.driver = webdriver.Chrome(options=options)
+                
+            self.driver.get(LOGIN_URL)
+            
+            if automated:
+                try:
+                    WebDriverWait(self.driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, "nav")))
+                    return True
+                except:
+                    self._log("⚠️ يتطلب تسجيل دخول يدوي")
+                    return not self.headless_var.get()
+            return True
+        except Exception as e:
+            self._log(f"❌ خطأ متصفح: {e}")
+            return False
 
-        # Additional wait for dynamic data load
-        time.sleep(3)
+    # ============================================================
+    # Data Extraction Core
+    # ============================================================
+    def _step_extract_data(self, account_code: str, type_name: str):
+        if not self.driver: return
+        
+        url = REPORT_URL_TEMPLATE.format(
+            from_date=self.from_date_var.get().strip(), 
+            to_date=self.to_date_var.get().strip(), 
+            account=account_code
+        )
+        
+        labels = {
+            "bank": ("البنوك", self.bank_status),
+            "restaurant": ("المطاعم", self.rest_status),
+            "driver": ("الموصلين", self.drv_status),
+            "employee": ("الموظفين", self.emp_status)
+        }
+        ar_name, label = labels[type_name]
+        
+        try:
+            self.driver.get(url)
+            data = self._extract_table_data(type_name)
+            self.data_store[type_name] = data
+            label.config(text=f"{ar_name}: {len(data)} سجل")
+        except Exception as e:
+            self._log(f"❌ خطأ {ar_name}: {e}")
+
+    def _extract_table_data(self, data_type: str) -> list:
+        wait = WebDriverWait(self.driver, 30)
+        try: wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "table tbody tr")))
+        except: pass
+        time.sleep(2)
 
         rows = self.driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
-        self._log(f"📋 تم العثور على {len(rows)} صف في الجدول")
-
         data = []
         for row in rows:
             try:
                 cells = row.find_elements(By.TAG_NAME, "td")
-                if len(cells) < 13:
-                    continue  # Skip incomplete rows (headers, footers, etc.)
+                if len(cells) < 13: continue
+                
+                name = cells[1].text.strip()
+                num = cells[2].text.strip()
+                if not num or "إجمالي" in name: continue
 
-                account_name = cells[1].text.strip()
-                account_number = cells[2].text.strip()
-                branch = cells[6].text.strip() if len(cells) > 6 else ""
-                currency = cells[9].text.strip() if len(cells) > 9 else ""
-                debit = self._parse_number(cells[11].text if len(cells) > 11 else "0")
-                credit = self._parse_number(cells[12].text if len(cells) > 12 else "0")
-                extracted_bal = self._parse_number(cells[13].text if len(cells) > 13 else "0")
+                debit = self._parse_number(cells[11].text)
+                credit = self._parse_number(cells[12].text)
+                ext_bal = self._parse_number(cells[13].text if len(cells) > 13 else "0")
+                base = abs(ext_bal) if len(cells) > 13 else abs(debit + credit)
 
-                # Calculate operational magnitude and correct sign based on type
-                base_balance = abs(extracted_bal) if len(cells) > 13 else abs(debit + credit)
+                balance = base
+                if data_type in ('restaurant', 'driver'):
+                    balance = -base if debit > credit else base
+                else: 
+                    balance = -base if credit > debit else base
 
-                if data_type == 'restaurant':
-                    # For restaurants (Creditors): positive means we owe them (Payable)
-                    balance = -base_balance if debit > credit else base_balance
-                else:
-                    # For banks (Debtors/Assets): positive means they have our money
-                    balance = -base_balance if credit > debit else base_balance
-
-                # Skip empty rows, total rows, or header-like rows
-                if not account_number or account_number in ("#", "رقم الحساب", ""):
-                    continue
-                if "إجمالي" in account_name or "الإجمالي" in account_name:
-                    continue
-
-                item = {
-                    "accountNumber": account_number,
-                    "accountName": account_name,
-                    "branch": branch,
-                    "currency": currency,
-                    "debit": debit,
-                    "credit": credit,
-                    "balance": balance,
-                    "type": data_type,
-                    "lastUpdated": datetime.now().isoformat()
-                }
-                data.append(item)
-
-            except Exception as e:
-                # Skip problematic rows silently
-                continue
-
+                data.append({
+                    "accountNumber": num, "accountName": name,
+                    "branch": cells[6].text.strip() if len(cells)>6 else "",
+                    "debit": debit, "credit": credit, "balance": balance,
+                    "type": data_type, "lastUpdated": datetime.now().isoformat()
+                })
+            except: pass
         return data
 
-    # ============================================================
-    # Step 4: Send Data to Firestore
-    # ============================================================
     def _step_send_to_firestore(self):
-        """Upload all extracted data to Firestore."""
-        if not self.db:
-            self._log("❌ Firebase غير متصل! اضغط زر الاتصال أولاً")
-            messagebox.showerror("خطأ", "يرجى الاتصال بـ Firebase أولاً")
+        if not self.db: 
+            self._log("⚠️ يرجى الاتصال بـ Firebase أولاً.")
             return
-
-        total = len(self.bank_data) + len(self.restaurant_data)
-        if total == 0:
-            self._log("⚠️ لا توجد بيانات لإرسالها! استخرج البيانات أولاً")
-            messagebox.showwarning("تنبيه", "لا توجد بيانات لإرسالها")
+            
+        total = sum(len(lst) for lst in self.data_store.values())
+        if total == 0: 
+            self._log("⚠️ لا توجد بيانات مسحوبة لإرسالها.")
             return
-
-        self._log(f"🚀 جاري إرسال {total} حساب إلى Firestore...")
 
         try:
+            self._log(f"🚀 جاري مزامنة {total} سجل إلى Firestore...")
             batch = self.db.batch()
             count = 0
-
-            # Write bank balances
-            for item in self.bank_data:
-                doc_id = f"bank_{item['accountNumber']}_{item['currency']}".replace("/", "_").replace(" ", "_")
-                doc_ref = self.db.collection(ROOT_COLLECTION).document(DATA_PATH).collection("system_balances").document(doc_id)
-                batch.set(doc_ref, item)
-                count += 1
-
-                # Firestore batch limit is 500
-                if count % 400 == 0:
-                    batch.commit()
-                    self._log(f"   ✅ تم إرسال {count} حساب...")
-                    batch = self.db.batch()
-
-            # Write restaurant balances
-            for item in self.restaurant_data:
-                doc_id = f"rest_{item['accountNumber']}_{item['currency']}".replace("/", "_").replace(" ", "_")
-                doc_ref = self.db.collection(ROOT_COLLECTION).document(DATA_PATH).collection("system_balances").document(doc_id)
-                batch.set(doc_ref, item)
-                count += 1
-
-                if count % 400 == 0:
-                    batch.commit()
-                    self._log(f"   ✅ تم إرسال {count} حساب...")
-                    batch = self.db.batch()
-
-            # Update sync metadata
+            for t_type, records in self.data_store.items():
+                for item in records:
+                    doc_id = f"{t_type}_{item['accountNumber']}".replace("/", "_").replace(" ","")
+                    ref = self.db.collection(ROOT_COLLECTION).document(DATA_PATH).collection("system_balances").document(doc_id)
+                    batch.set(ref, item)
+                    count += 1
+                    if count % 400 == 0:
+                        batch.commit()
+                        batch = self.db.batch()
+            
             sync_ref = self.db.collection(ROOT_COLLECTION).document(DATA_PATH).collection("sync_metadata").document("tawseel_sync")
             batch.set(sync_ref, {
                 "lastSync": datetime.now().isoformat(),
                 "status": "success",
-                "bankCount": len(self.bank_data),
-                "restaurantCount": len(self.restaurant_data),
+                "counts": {k: len(v) for k, v in self.data_store.items()},
                 "totalCount": total,
-                "fromDate": self.from_date_var.get().strip(),
-                "toDate": self.to_date_var.get().strip()
+                "fromDate": self.from_date_var.get(),
+                "toDate": self.to_date_var.get()
             })
-
-            # Final commit
             batch.commit()
-
-            self._log(f"✅ تم إرسال جميع البيانات بنجاح! ({count} حساب)")
-            self._log(f"   🏦 بنوك: {len(self.bank_data)}")
-            self._log(f"   🍽️ مطاعم: {len(self.restaurant_data)}")
-            self.fb_status.set(f"Firebase: ✅ تم الإرسال ({count})")
-
-            messagebox.showinfo("نجاح ✅", f"تم إرسال {count} حساب إلى Firestore بنجاح!")
-
+            self._log(f"✅ تم الرفع بنجاح: {count} سجل")
+            self.fb_status.config(text=f"تم الرفع: {count}")
         except Exception as e:
-            self._log(f"❌ فشل الإرسال: {e}")
-            messagebox.showerror("خطأ", f"فشل إرسال البيانات:\n{e}")
+            err_msg = str(e)
+            if "invalid_grant" in err_msg or "JWT" in err_msg:
+                self._log("❌ خطأ أمني: ساعة جهازك غير مضبوطة!")
+                self._log("💡 الحل: اذهب لإعدادات الساعة في الويندوز واضغط على 'Sync Now' (مزامنة الآن).")
+            else:
+                self._log(f"❌ خطأ مزامنة: {err_msg}")
+            raise e
 
-    # ============================================================
-    # Cleanup
-    # ============================================================
     def on_close(self):
-        """Clean up resources on window close."""
+        self.is_service_running = False
+        if self.listener: self.listener.unsubscribe()
         if self.driver:
-            try:
-                self.driver.quit()
-            except Exception:
-                pass
+            try: self.driver.quit()
+            except: pass
         self.root.destroy()
 
-
-# ============================================================
-# Main Entry Point
-# ============================================================
 if __name__ == "__main__":
     root = tk.Tk()
     app = TawseelScraper(root)

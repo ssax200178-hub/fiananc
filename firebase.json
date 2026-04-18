@@ -19,6 +19,18 @@
       }
     ]
   },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-hadolint.log"
+      ]
+    }
+  ],
   "storage": {
     "rules": "storage.rules"
   }
