@@ -84,6 +84,7 @@ const PremiumLayout = () => {
             items: [
                 { label: 'إدارة الجلسة', path: '/scraping/session', icon: 'key', permission: 'automation_manage' },
                 { label: 'مركز السحب والأتمتة', path: '/scraping/hub', icon: 'memory', permission: 'automation_manage' },
+                { label: 'عمليات السحب المخصصة', path: '/scraping/operations', icon: 'cloud_download', permission: 'automation_manage' },
                 { label: 'مستعرض البيانات', path: '/scraping/viewer', icon: 'travel_explore', permission: 'automation_manage' },
                 { label: 'تحويل الأرصدة المجمعة', path: '/tools/bulk-transfer', icon: 'currency_exchange', permission: 'tools_manage', featureFlag: 'bulk_transfer_tool' },
                 { label: 'مزامنة عملة الحساب', path: '/tools/currency-sync', icon: 'sync', permission: 'tools_manage', featureFlag: 'currency_sync_tool' },

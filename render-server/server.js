@@ -362,11 +362,23 @@ async function scrapeDriversDetails(cookies, configRef) {
         headers: { ...BROWSER_HEADERS, "Cookie": cookies },
         timeout: 60000
       });
+
+      // Check for redirect to login (session expired)
+      if (res.request?.res?.responseUrl?.includes('/login') || res.data?.includes('Login')) {
+        console.error('❌ Session expired during drivers scrape. Stopping.');
+        hasMore = false;
+        break;
+      }
       
       const $ = cheerio.load(res.data);
-      const rows = $("table#sampleTable tbody tr");
+
+      // Try multiple table selectors — the site may use different IDs
+      let rows = $("table#sampleTable tbody tr");
+      if (rows.length === 0) rows = $("table.table tbody tr");
+      if (rows.length === 0) rows = $("table tbody tr");
       
       if (rows.length === 0) {
+        console.log(`  ℹ️ No rows found on drivers page ${page}. Stopping pagination.`);
         hasMore = false;
         break;
       }
@@ -374,33 +386,40 @@ async function scrapeDriversDetails(cookies, configRef) {
       let parsedOnPage = 0;
       rows.each((i, row) => {
         const cells = $(row).find("td");
-        if (cells.length >= 10) {
-          const id = $(cells[0]).text().trim();
-          if (!id) return;
+        const cellCount = cells.length;
+        if (cellCount < 4) return; // Skip header-like or empty rows
+
+        const getCellText = (idx) => cellCount > idx ? $(cells[idx]).text().trim() : '';
+
+        const id = getCellText(0);
+        if (!id || isNaN(Number(id))) return; // Skip non-numeric IDs
           
-          const docRef = db.collection("app").doc("v1_data").collection("scraped_drivers").doc(`driver_${id}`);
-          
-          batchOps.set(docRef, {
-            id,
-            name: $(cells[1]).text().trim(),
-            rating: $(cells[2]).text().trim(),
-            pendingBooks: $(cells[4]).text().trim(),
-            phone: $(cells[5]).text().trim(),
-            vehicleType: $(cells[6]).text().trim(),
-            availability: $(cells[7]).text().trim(),
-            invoiceSuggestion: $(cells[8]).text().trim(),
-            driverStatus: $(cells[9]).text().trim(),
-            savingsBalance: $(cells[10]).text().trim(),
-            allowanceCeiling: $(cells[11]).text().trim(),
-            contractType: $(cells[12]).text().trim(),
-            lastUpdated: timestamp
-          }, { merge: true });
-          
-          batchCount++;
-          totalDrivers++;
-          parsedOnPage++;
-        }
+        const docRef = db.collection("app").doc("v1_data").collection("scraped_drivers").doc(`driver_${id}`);
+        
+        const record = {
+          id,
+          name: getCellText(1),
+          rating: getCellText(2),
+          pendingBooks: getCellText(4),
+          phone: getCellText(5),
+          vehicleType: getCellText(6),
+          availability: getCellText(7),
+          invoiceSuggestion: getCellText(8),
+          driverStatus: getCellText(9),
+          savingsBalance: getCellText(10),
+          allowanceCeiling: getCellText(11),
+          contractType: getCellText(12),
+          lastUpdated: timestamp,
+          _columnCount: cellCount // debug: track how many columns were found
+        };
+
+        batchOps.set(docRef, record, { merge: true });
+        batchCount++;
+        totalDrivers++;
+        parsedOnPage++;
       });
+
+      console.log(`  ✅ Drivers page ${page}: ${parsedOnPage} records parsed (${rows.length} rows found)`);
 
       if (batchCount >= 450) {
         await batchOps.commit();
@@ -408,11 +427,15 @@ async function scrapeDriversDetails(cookies, configRef) {
         batchCount = 0;
       }
       
-      if (parsedOnPage === 0) hasMore = false;
-      page++;
+      // Stop if no records parsed (end of list)
+      if (parsedOnPage === 0) {
+        hasMore = false;
+      } else {
+        page++;
+      }
       
       // Delay to avoid overwhelming the server
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 1500));
     } catch (e) {
       console.error(`❌ Failed on Drivers Page ${page}:`, e.message);
       hasMore = false; // Stop on error
@@ -964,6 +987,65 @@ async function scrapeRestaurantStatements(fromDate, toDate, targetMarkets = "all
 
 app.get("/", (req, res) => {
   res.json({ status: "alive", service: "Tawseel Cloud Scraper", timestamp: new Date().toISOString() });
+});
+
+// ─── Diagnostic: Inspect drivers table structure ───────────────────────────
+// POST /debug-drivers-table  → returns first page headers + first 2 rows as JSON
+// Useful when scraping fails due to table column changes on the Tawseel site
+app.post("/debug-drivers-table", async (req, res) => {
+  const authHeader = req.headers["x-api-key"] || req.body.apiKey;
+  if (authHeader !== API_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    const sessionDoc = await db.doc("app/v1_data/settings/tawseel_session").get();
+    const cookies = sessionDoc.data()?.cookies;
+    if (!cookies) return res.status(400).json({ error: "No active session. Run main job first." });
+
+    const pageRes = await axios.get(`${BASE_URL}/delivery/men?page=1`, {
+      headers: { ...BROWSER_HEADERS, "Cookie": cookies },
+      timeout: 30000
+    });
+
+    const $ = cheerio.load(pageRes.data);
+
+    // Extract all table candidates
+    const tables = [];
+    $("table").each((i, table) => {
+      const id = $(table).attr("id") || `(no id #${i})`;
+      const cls = $(table).attr("class") || "(no class)";
+
+      // Extract headers
+      const headers = [];
+      $(table).find("thead th, thead td").each((_, th) => {
+        headers.push($(th).text().trim());
+      });
+
+      // Extract first 2 body rows
+      const rows = [];
+      $(table).find("tbody tr").slice(0, 2).each((_, row) => {
+        const cells = [];
+        $(row).find("td").each((ci, td) => {
+          cells.push({ col: ci, text: $(td).text().trim().slice(0, 60) });
+        });
+        rows.push(cells);
+      });
+
+      tables.push({ tableId: id, tableClass: cls, headers, sampleRows: rows });
+    });
+
+    res.json({
+      success: true,
+      url: `${BASE_URL}/delivery/men?page=1`,
+      tablesFound: tables.length,
+      tables,
+      pageTitle: $("title").text().trim(),
+      isLoginPage: pageRes.data.includes("Login") || pageRes.request?.res?.responseUrl?.includes("/login")
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post("/start-job", async (req, res) => {

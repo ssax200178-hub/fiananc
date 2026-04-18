@@ -43,6 +43,7 @@ import ScrapePreviewPage from './components/ScrapePreviewPage';
 import TawseelSessionPage from './components/scraping/TawseelSessionPage';
 import ScrapingHubPage from './components/scraping/ScrapingHubPage';
 import ScrapedDataViewer from './components/scraping/ScrapedDataViewer';
+import ScrapingOperationsPage from './components/scraping/ScrapingOperationsPage';
 import ErrorBoundary from './components/ErrorBoundary';
 
 import { AppContext } from './AppContext';
@@ -305,6 +306,9 @@ const App: React.FC = () => {
               } />
               <Route path="scraping/viewer" element={
                 (currentUser?.role === 'super_admin' || currentUser?.permissions?.includes('automation_manage')) ? <ScrapedDataViewer /> : <Navigate to="/" />
+              } />
+              <Route path="scraping/operations" element={
+                (currentUser?.role === 'super_admin' || currentUser?.permissions?.includes('automation_manage')) ? <ScrapingOperationsPage /> : <Navigate to="/" />
               } />
 
               <Route path="permissions-matrix" element={
